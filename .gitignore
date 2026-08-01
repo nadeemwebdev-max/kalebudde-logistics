@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+**/node_modules/
+.venv/
+**/.venv/
+venv/
+env/
+
+# Build & Dist Outputs
+dist/
+**/dist/
+build/
+*.egg-info/
+
+# Python cache & SQLite DB
+__pycache__/
+/**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+backend/kalebudde.db
+
+# Environment variables
+.env
+.env.local
+
+# IDE & OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local uploads folder content (ignore uploaded files, keep directory)
+backend/uploads/*
+!backend/uploads/.gitkeep
+frontend/public/uploads/*
+!frontend/public/uploads/.gitkeep

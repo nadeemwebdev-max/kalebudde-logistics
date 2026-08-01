@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 80" fill="none">
+  <rect width="260" height="80" rx="8" fill="none"/>
+  <g transform="translate(15, 12)">
+    <!-- Yaara Emerald Leaf & Wave Signature -->
+    <path d="M12 48 C6 28 26 12 46 16 C50 34 34 52 12 48 Z" fill="#10B981"/>
+    <path d="M22 42 C32 30 40 22 42 20" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round"/>
+    <circle cx="48" cy="14" r="4" fill="#F59E0B"/>
+    <!-- Wordmark -->
+    <text x="60" y="46" font-family="'Poppins', 'Inter', sans-serif" font-weight="900" font-size="34" fill="#047857" letter-spacing="-1">yaara</text>
+    <text x="62" y="58" font-family="'Inter', sans-serif" font-weight="700" font-size="9" fill="#059669" letter-spacing="1.5">CONSUMER PRODUCTS</text>
+  </g>
+</svg>

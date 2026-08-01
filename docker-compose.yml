@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: kalebudde_db
+    environment:
+      POSTGRES_USER: kalebudde
+      POSTGRES_PASSWORD: kalebudde_secret
+      POSTGRES_DB: kalebudde
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kalebudde"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    container_name: kalebudde_api
+    environment:
+      DATABASE_URL: postgresql+psycopg2://kalebudde:kalebudde_secret@db:5432/kalebudde
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      CORS_ORIGINS: http://localhost:5173,http://localhost:4173
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  web:
+    build: ./frontend
+    container_name: kalebudde_web
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+volumes:
+  pgdata:
