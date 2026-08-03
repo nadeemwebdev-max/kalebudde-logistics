@@ -32,8 +32,8 @@ export function Logo({ light = false, className = "" }: { light?: boolean; class
     <Link to="/" className={`flex items-center gap-3 group ${className}`} aria-label="Kalebudde Logistics home">
       <img
         src={light ? "/logo-white.png" : "/logo.png"}
-        alt="Kalebudde Logistics Official Crest Logo"
-        className="h-11 w-auto object-contain transition group-hover:scale-105"
+        alt="Kalebudde Logistics Royal Crest Logo"
+        className="h-14 w-auto object-contain transition group-hover:scale-105"
       />
     </Link>
   );
