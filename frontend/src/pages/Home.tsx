@@ -64,10 +64,12 @@ export default function Home() {
           height={1024}
         />
         <div className="absolute inset-0 bg-gradient-to-r from-brand-900 via-brand-900/85 to-brand-900/30" />
-        <div className="container-x relative py-24 lg:py-32">
+        <div className="container-x relative py-24 lg:py-32 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
           <div className="max-w-2xl animate-fade-up">
-            <p className="eyebrow">Kalebudde Logistics</p>
-            <h1 className="mt-3 font-display text-4xl font-extrabold leading-[1.1] text-white sm:text-5xl lg:text-6xl">
+            <div className="flex items-center gap-3 mb-3">
+              <img src="/logo-white.png" alt="Kalebudde Logistics Crest" className="h-12 w-auto object-contain drop-shadow-lg" />
+            </div>
+            <h1 className="mt-2 font-display text-4xl font-extrabold leading-[1.1] text-white sm:text-5xl lg:text-6xl">
               Your Trusted Partner in Domestic Logistics
             </h1>
             <p className="mt-6 text-lg leading-relaxed text-brand-100">

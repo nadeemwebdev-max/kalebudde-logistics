@@ -27,24 +27,14 @@ const NAV = [
   { to: "/contact", label: "Contact" },
 ];
 
-export function Logo({ light = false }: { light?: boolean }) {
+export function Logo({ light = false, className = "" }: { light?: boolean; className?: string }) {
   return (
-    <Link to="/" className="flex items-center gap-2.5" aria-label="Kalebudde Logistics home">
-      <span className="grid h-10 w-10 place-items-center rounded-xl bg-accent-500 text-white shadow-lg shadow-accent-500/30">
-        <Truck size={22} strokeWidth={2.4} />
-      </span>
-      <span className="leading-none">
-        <span
-          className={`block font-display text-lg font-extrabold tracking-tight ${
-            light ? "text-white" : "text-brand-900"
-          }`}
-        >
-          KALEBUDDE
-        </span>
-        <span className="block text-[10px] font-bold tracking-[0.32em] text-accent-500">
-          LOGISTICS
-        </span>
-      </span>
+    <Link to="/" className={`flex items-center gap-3 group ${className}`} aria-label="Kalebudde Logistics home">
+      <img
+        src={light ? "/logo-white.png" : "/logo.png"}
+        alt="Kalebudde Logistics Official Crest Logo"
+        className="h-11 w-auto object-contain transition group-hover:scale-105"
+      />
     </Link>
   );
 }
