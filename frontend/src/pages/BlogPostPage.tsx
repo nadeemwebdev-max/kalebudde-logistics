@@ -98,14 +98,14 @@ export default function BlogPostPage() {
         title={post.meta_title || `${post.title} | Kalebudde Logistics`}
         description={post.meta_description || post.excerpt}
         path={`/blog/${post.slug}`}
-        image={post.cover_image || "/images/hero-truck.jpg"}
+        image={post.cover_image || "/images/hero-truck.png"}
         type="article"
         jsonLd={{
           "@context": "https://schema.org",
           "@type": "BlogPosting",
           headline: post.title,
           description: post.excerpt,
-          image: `https://kalebuddelogistics.in${post.cover_image || "/images/hero-truck.jpg"}`,
+          image: `https://kalebuddelogistics.in${post.cover_image || "/images/hero-truck.png"}`,
           datePublished: post.published_at,
           author: { "@type": "Person", name: post.author },
           publisher: { "@type": "Organization", name: "Kalebudde Logistics" },

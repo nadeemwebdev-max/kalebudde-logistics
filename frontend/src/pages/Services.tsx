@@ -6,25 +6,25 @@ import Seo from "../components/Seo";
 const SERVICES = [
   {
     title: "Domestic Freight Forwarding",
-    image: "/images/hero-truck.jpg",
+    image: "/images/hero-truck.png",
     text: "We offer a variety of land-based transportation options to move your freight across India. Our experienced team designs a customised solution based on your specific needs, considering budget, time constraints and cargo type.",
     points: ["FTL & PTL movements", "Lane-based contract rates", "E-way bill & documentation support"],
   },
   {
     title: "Warehousing",
-    image: "/images/warehouse.jpg",
+    image: "/images/warehouse.png",
     text: "We provide secure and reliable storage for your inventory. Our warehousing facilities are strategically located across India, ensuring easy access and efficient distribution to your customers.",
     points: ["Strategically located facilities", "Inventory accuracy & cycle counting", "Value-added handling and kitting"],
   },
   {
     title: "Relocation Services",
-    image: "/images/fleet.jpg",
+    image: "/images/fleet.png",
     text: "Whether you're moving your home or your office, Kalebudde Logistics can handle everything. Our team of relocation specialists ensures a stress-free and efficient move from packing to placement.",
     points: ["Home & office relocation", "Professional packing crews", "Transit insurance options"],
   },
   {
     title: "Project Logistics Management",
-    image: "/images/warehouse.jpg",
+    image: "/images/warehouse.png",
     text: "We have the expertise to handle complex logistics projects from start to finish, working closely with you to develop a comprehensive plan for successful execution.",
     points: ["Multi-leg project planning", "Dedicated project coordinator", "Milestone reporting"],
   },

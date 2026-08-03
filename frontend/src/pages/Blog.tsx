@@ -78,7 +78,7 @@ export default function Blog() {
               <article key={p.id} className="card !p-0 flex flex-col overflow-hidden">
                 <Link to={`/blog/${p.slug}`}>
                   <img
-                    src={p.cover_image || "/images/hero-truck.jpg"}
+                    src={p.cover_image || "/images/hero-truck.png"}
                     alt={p.title}
                     className="h-48 w-full object-cover"
                     loading="lazy"

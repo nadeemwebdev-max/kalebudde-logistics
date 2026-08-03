@@ -8,19 +8,19 @@ const VEHICLES = [
     name: "32ft Multi-Axle Container",
     capacity: "Up to 15 tonnes",
     use: "Long-haul FMCG, paints and palletised cargo",
-    image: "/images/hero-truck.jpg",
+    image: "/images/hero-truck.png",
   },
   {
     name: "20ft & 24ft Closed Body",
     capacity: "7 – 10 tonnes",
     use: "Regional distribution and retail replenishment",
-    image: "/images/fleet.jpg",
+    image: "/images/fleet.png",
   },
   {
     name: "Open Body & Trailer",
     capacity: "Project cargo",
     use: "Steel, machinery and over-dimensional consignments",
-    image: "/images/warehouse.jpg",
+    image: "/images/warehouse.png",
   },
 ];
 
@@ -31,12 +31,12 @@ export default function Fleet() {
         title="Our Fleet | Kalebudde Logistics Trucks & Vehicles"
         description="Explore the Kalebudde Logistics fleet — 32ft multi-axle containers, closed body trucks and open trailers, GPS tracked and maintained for safe pan-India delivery."
         path="/fleet"
-        image="/images/fleet.jpg"
+        image="/images/fleet.png"
       />
 
       <section className="relative overflow-hidden bg-brand-900 py-20">
         <img
-          src="/images/fleet.jpg"
+          src="/images/fleet.png"
           alt="Row of Kalebudde Logistics branded trucks at a depot"
           className="absolute inset-0 h-full w-full object-cover opacity-30"
         />

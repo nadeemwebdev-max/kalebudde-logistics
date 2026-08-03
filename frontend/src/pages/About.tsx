@@ -70,7 +70,7 @@ export default function About() {
 
         <div className="overflow-hidden rounded-2xl shadow-xl">
           <img
-            src="/images/fleet.jpg"
+            src="/images/fleet.png"
             alt="Fleet of Kalebudde Logistics trucks at the company depot"
             className="h-full w-full object-cover"
             loading="lazy"

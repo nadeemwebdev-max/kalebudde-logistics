@@ -64,7 +64,7 @@ goods to design exactly this kind of cost-aware network. [Get a free quote](/con
         meta_description="A clear explanation of domestic freight forwarding in India - "
                          "what forwarders do, how they differ from transporters, and how "
                          "to choose the right partner.",
-        cover_image="/images/hero-truck.jpg",
+        cover_image="/images/hero-truck.png",
         content="""## Forwarder vs transporter
 
 A transporter owns vehicles and moves cargo from A to B. A **freight forwarder** designs

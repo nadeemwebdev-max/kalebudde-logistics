@@ -56,7 +56,7 @@ export default function Home() {
       {/* Hero */}
       <section className="relative overflow-hidden bg-brand-900">
         <img
-          src="/images/hero-truck.jpg"
+          src="/images/hero-truck.png"
           alt="Kalebudde Logistics branded container truck on an Indian highway at sunset"
           className="absolute inset-0 h-full w-full object-cover opacity-40"
           fetchPriority="high"

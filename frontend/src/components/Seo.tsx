@@ -27,7 +27,7 @@ export default function Seo({
   title,
   description,
   path = "/",
-  image = "/images/hero-truck.jpg",
+  image = "/images/hero-truck.png",
   type = "website",
   jsonLd,
   noindex,
