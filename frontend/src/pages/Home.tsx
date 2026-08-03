@@ -154,12 +154,19 @@ export default function Home() {
         <div className="container-x grid items-center gap-12 lg:grid-cols-2">
           <div className="overflow-hidden rounded-2xl shadow-xl">
             <img
-              src="/images/warehouse.jpg"
+              src="/images/warehouse.png"
               alt="Kalebudde Logistics warehouse interior with racking and palletised goods"
               className="h-full w-full object-cover"
               loading="lazy"
               width={1200}
               height={800}
+              onError={(e) => {
+                const target = e.currentTarget;
+                if (!target.dataset.tried) {
+                  target.dataset.tried = "true";
+                  target.src = "/images/warehouse.jpg";
+                }
+              }}
             />
           </div>
           <div>
@@ -221,11 +228,18 @@ export default function Home() {
       <section className="container-x">
         <div className="relative overflow-hidden rounded-3xl bg-brand-900 px-8 py-16 text-center">
           <img
-            src="/images/fleet.jpg"
+            src="/images/fleet.png"
             alt=""
             aria-hidden="true"
             className="absolute inset-0 h-full w-full object-cover opacity-20"
             loading="lazy"
+            onError={(e) => {
+              const target = e.currentTarget;
+              if (!target.dataset.tried) {
+                target.dataset.tried = "true";
+                target.src = "/images/fleet.jpg";
+              }
+            }}
           />
           <div className="relative mx-auto max-w-2xl">
             <h2 className="font-display text-3xl font-extrabold text-white sm:text-4xl">
