@@ -66,8 +66,16 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-r from-brand-900 via-brand-900/85 to-brand-900/30" />
         <div className="container-x relative py-24 lg:py-32 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
           <div className="max-w-2xl animate-fade-up">
-            <div className="flex items-center gap-3 mb-4">
-              <img src="/logo-white.png" alt="Kalebudde Logistics Crest" className="h-16 w-auto object-contain drop-shadow-xl" />
+            <div className="flex items-center gap-3 mb-6">
+              <img src="/logo-white.png" alt="Kalebudde Logistics Crest Emblem" className="h-16 w-auto object-contain drop-shadow-xl" />
+              <div className="leading-tight">
+                <span className="block font-display text-xl sm:text-2xl font-extrabold tracking-tight text-white">
+                  KALEBUDDE
+                </span>
+                <span className="block text-xs font-bold tracking-[0.35em] text-accent-400">
+                  LOGISTICS
+                </span>
+              </div>
             </div>
             <h1 className="mt-2 font-display text-4xl font-extrabold leading-[1.1] text-white sm:text-5xl lg:text-6xl">
               Your Trusted Partner in Domestic Logistics

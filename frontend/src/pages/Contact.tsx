@@ -35,7 +35,7 @@ export default function Contact() {
     <>
       <Seo
         title="Contact Kalebudde Logistics | Get a Free Quote"
-        description="Contact Kalebudde Logistics for a free logistics quote. Domestic freight forwarding, warehousing and relocation services across India."
+        description="Contact Kalebudde Logistics at 75/2B Kalebudde Warehouse Compound, P.B.Road Gabbur Hubli-580029. Phone: +91-8494941838, Email: kalebuddelogistics@gmail.com."
         path="/contact"
         jsonLd={{
           "@context": "https://schema.org",
@@ -43,8 +43,16 @@ export default function Contact() {
           mainEntity: {
             "@type": "Organization",
             name: "Kalebudde Logistics",
-            email: "info@kalebuddelogistics.in",
-            telephone: "+91-98450-00000",
+            email: "kalebuddelogistics@gmail.com",
+            telephone: "+91-8494941838",
+            address: {
+              "@type": "PostalAddress",
+              streetAddress: "75/2B Kalebudde Warehouse Compound, P.B.Road Gabbur",
+              addressLocality: "Hubli",
+              postalCode: "580029",
+              addressRegion: "Karnataka",
+              addressCountry: "IN",
+            },
           },
         }}
       />
@@ -126,29 +134,87 @@ export default function Contact() {
               </button>
             </form>
           )}
+
+          {/* Interactive Google Map Box */}
+          <div className="mt-10 overflow-hidden rounded-2xl border border-slate-200 shadow-sm bg-white p-5">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+              <div>
+                <h3 className="font-display text-lg font-bold text-brand-900 flex items-center gap-2">
+                  <MapPin className="text-accent-500" size={20} /> Kalebudde Warehouse (Google Maps)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  75/2B Kalebudde Warehouse Compound, P.B.Road Gabbur Hubli-580029
+                </p>
+              </div>
+              <a
+                href="https://www.google.com/maps/dir//Kalebudde+Warehouse,+845W%2B5X7,+NH+48,+Hubali-Dharwad,+Dharwad,+Narayanapura,+Karnataka+580028/@15.4630869,74.9976658,13z/data=!4m8!4m7!1m0!1m5!1m1!1s0x3bb8d78c191e716b:0xc40f9bf617a597e6!2m2!1d75.1474435!2d15.3079081?hl=en-IN&entry=ttu"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-primary !py-2 !px-4 text-xs shrink-0 flex items-center gap-2"
+              >
+                <MapPin size={14} /> Get Directions on Google Maps
+              </a>
+            </div>
+            <div className="h-72 w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-100 relative">
+              <iframe
+                title="Kalebudde Warehouse Hubli Google Map Directions Location"
+                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3848.0673059885816!2d75.1474435!3d15.3079081!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3bb8d78c191e716b%3A0xc40f9bf617a597e6!2sKalebudde%20Warehouse!5e0!3m2!1sen!2sin!4v1700000000000!5m2!1sen!2sin"
+                width="100%"
+                height="100%"
+                style={{ border: 0 }}
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            </div>
+          </div>
         </div>
 
         <aside className="space-y-4">
-          {[
-            [MapPin, "Office", "Bengaluru, Karnataka, India"],
-            [Phone, "Phone", "+91 98450 00000"],
-            [Mail, "Email", "info@kalebuddelogistics.in"],
-          ].map(([Icon, label, value]) => {
-            const I = Icon as typeof Mail;
-            return (
-              <div key={label as string} className="flex gap-4 rounded-2xl bg-slate-50 p-6">
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent-500/10 text-accent-500">
-                  <I size={19} />
-                </span>
-                <div>
-                  <p className="text-xs uppercase tracking-wider text-slate-500">
-                    {label as string}
-                  </p>
-                  <p className="mt-1 font-semibold text-brand-900">{value as string}</p>
-                </div>
-              </div>
-            );
-          })}
+          <div className="flex gap-4 rounded-2xl bg-slate-50 p-6">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent-500/10 text-accent-500">
+              <MapPin size={19} />
+            </span>
+            <div>
+              <p className="text-xs uppercase tracking-wider text-slate-500">Head Office & Warehouse</p>
+              <p className="mt-1 font-semibold text-brand-900 leading-snug">
+                75/2B Kalebudde Warehouse Compound, P.B.Road Gabbur Hubli-580029
+              </p>
+              <a
+                href="https://www.google.com/maps/dir//Kalebudde+Warehouse,+845W%2B5X7,+NH+48,+Hubali-Dharwad,+Dharwad,+Narayanapura,+Karnataka+580028/@15.4630869,74.9976658,13z/data=!4m8!4m7!1m0!1m5!1m1!1s0x3bb8d78c191e716b:0xc40f9bf617a597e6!2m2!1d75.1474435!2d15.3079081?hl=en-IN&entry=ttu"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-accent-600 hover:underline"
+              >
+                Get Directions on Google Maps &rarr;
+              </a>
+            </div>
+          </div>
+
+          <div className="flex gap-4 rounded-2xl bg-slate-50 p-6">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent-500/10 text-accent-500">
+              <Phone size={19} />
+            </span>
+            <div>
+              <p className="text-xs uppercase tracking-wider text-slate-500">Mobile Number</p>
+              <a href="tel:+918494941838" className="mt-1 block font-semibold text-brand-900 hover:text-accent-500">
+                +91-8494941838
+              </a>
+            </div>
+          </div>
+
+          <div className="flex gap-4 rounded-2xl bg-slate-50 p-6">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent-500/10 text-accent-500">
+              <Mail size={19} />
+            </span>
+            <div>
+              <p className="text-xs uppercase tracking-wider text-slate-500">Email</p>
+              <a href="mailto:kalebuddelogistics@gmail.com" className="mt-1 block font-semibold text-brand-900 hover:text-accent-500">
+                kalebuddelogistics@gmail.com
+              </a>
+            </div>
+          </div>
+
           <div className="rounded-2xl bg-brand-900 p-6 text-brand-100">
             <h2 className="font-display text-lg font-bold text-white">Operating hours</h2>
             <p className="mt-2 text-sm">Monday – Saturday: 9:00 AM – 7:00 PM</p>

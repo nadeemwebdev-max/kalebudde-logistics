@@ -27,14 +27,58 @@ const NAV = [
   { to: "/contact", label: "Contact" },
 ];
 
-export function Logo({ light = false, className = "" }: { light?: boolean; className?: string }) {
+export function Logo({
+  light = false,
+  stacked = false,
+  className = "",
+}: {
+  light?: boolean;
+  stacked?: boolean;
+  className?: string;
+}) {
+  if (stacked) {
+    return (
+      <Link to="/" className={`flex flex-col items-center justify-center group ${className}`} aria-label="Kalebudde Logistics home">
+        <img
+          src={light ? "/logo-white.png" : "/logo.png"}
+          alt="Kalebudde Logistics Royal Crest"
+          className="h-20 w-auto object-contain transition group-hover:scale-105"
+        />
+        <div className="mt-2 text-center leading-none">
+          <span
+            className={`block font-display text-base sm:text-lg font-extrabold tracking-wider ${
+              light ? "text-white" : "text-brand-900"
+            }`}
+          >
+            KALEBUDDE
+          </span>
+          <span className="mt-0.5 block text-[10px] sm:text-[11px] font-bold tracking-[0.35em] text-accent-500">
+            LOGISTICS
+          </span>
+        </div>
+      </Link>
+    );
+  }
+
   return (
-    <Link to="/" className={`flex items-center gap-3 group ${className}`} aria-label="Kalebudde Logistics home">
+    <Link to="/" className={`flex items-center gap-3.5 group ${className}`} aria-label="Kalebudde Logistics home">
       <img
         src={light ? "/logo-white.png" : "/logo.png"}
-        alt="Kalebudde Logistics Royal Crest Logo"
-        className="h-14 w-auto object-contain transition group-hover:scale-105"
+        alt="Kalebudde Logistics Royal Crest"
+        className="h-16 max-h-16 w-auto object-contain py-0.5 transition group-hover:scale-105"
       />
+      <div className="leading-tight">
+        <span
+          className={`block font-display text-lg sm:text-xl font-extrabold tracking-tight ${
+            light ? "text-white" : "text-brand-900"
+          }`}
+        >
+          KALEBUDDE
+        </span>
+        <span className="block text-[10px] sm:text-[11px] font-bold tracking-[0.32em] text-accent-500">
+          LOGISTICS
+        </span>
+      </div>
     </Link>
   );
 }
@@ -64,18 +108,25 @@ function Header() {
       <div className="hidden bg-brand-900 py-2 text-xs text-brand-100 lg:block">
         <div className="container-x flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <span className="flex items-center gap-1.5">
-              <Phone size={13} /> +91 98450 00000
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Mail size={13} /> info@kalebuddelogistics.in
-            </span>
+            <a href="tel:+918494941838" className="flex items-center gap-1.5 hover:text-white transition">
+              <Phone size={13} /> +91-8494941838
+            </a>
+            <a href="mailto:kalebuddelogistics@gmail.com" className="flex items-center gap-1.5 hover:text-white transition">
+              <Mail size={13} /> kalebuddelogistics@gmail.com
+            </a>
           </div>
-          <span>Serving businesses across India since 2014</span>
+          <a
+            href="https://www.google.com/maps/dir//Kalebudde+Warehouse,+845W%2B5X7,+NH+48,+Hubali-Dharwad,+Dharwad,+Narayanapura,+Karnataka+580028/@15.4630869,74.9976658,13z/data=!4m8!4m7!1m0!1m5!1m1!1s0x3bb8d78c191e716b:0xc40f9bf617a597e6!2m2!1d75.1474435!2d15.3079081?hl=en-IN&entry=ttu"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 hover:text-white transition"
+          >
+            <MapPin size={13} className="text-accent-400" /> 75/2B Kalebudde Warehouse Compound, P.B.Road Gabbur Hubli-580029
+          </a>
         </div>
       </div>
 
-      <nav className="container-x flex h-[72px] items-center justify-between">
+      <nav className="container-x flex h-[80px] items-center justify-between">
         <Logo />
         <ul className="hidden items-center gap-1 lg:flex">
           {NAV.map((n) => (
@@ -250,15 +301,26 @@ function Footer() {
           <ul className="space-y-3 text-sm">
             <li className="flex gap-2.5">
               <MapPin size={16} className="mt-0.5 shrink-0 text-accent-400" />
-              Bengaluru, Karnataka, India
+              <a
+                href="https://www.google.com/maps/dir//Kalebudde+Warehouse,+845W%2B5X7,+NH+48,+Hubali-Dharwad,+Dharwad,+Narayanapura,+Karnataka+580028/@15.4630869,74.9976658,13z/data=!4m8!4m7!1m0!1m5!1m1!1s0x3bb8d78c191e716b:0xc40f9bf617a597e6!2m2!1d75.1474435!2d15.3079081?hl=en-IN&entry=ttu"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-accent-400 transition"
+              >
+                75/2B Kalebudde Warehouse Compound, P.B.Road Gabbur Hubli-580029
+              </a>
             </li>
             <li className="flex gap-2.5">
               <Phone size={16} className="mt-0.5 shrink-0 text-accent-400" />
-              +91 98450 00000
+              <a href="tel:+918494941838" className="hover:text-accent-400 transition">
+                +91-8494941838
+              </a>
             </li>
             <li className="flex gap-2.5">
               <Mail size={16} className="mt-0.5 shrink-0 text-accent-400" />
-              info@kalebuddelogistics.in
+              <a href="mailto:kalebuddelogistics@gmail.com" className="hover:text-accent-400 transition">
+                kalebuddelogistics@gmail.com
+              </a>
             </li>
           </ul>
         </div>
