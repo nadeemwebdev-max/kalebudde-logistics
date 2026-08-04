@@ -89,6 +89,8 @@ function Header() {
   const { user, logout } = useAuth();
   const { pathname } = useLocation();
 
+  const isDashboardRoute = pathname.startsWith("/admin") || pathname.startsWith("/dashboard");
+
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
@@ -149,8 +151,14 @@ function Header() {
         </ul>
 
         <div className="hidden items-center gap-3 lg:flex">
-          {user ? (
+          {isDashboardRoute && user ? (
             <>
+              <Link
+                to="/"
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+              >
+                🌐 View Website
+              </Link>
               <Link
                 to={user.role === "client" ? "/dashboard" : "/admin"}
                 className="flex items-center gap-2 rounded-xl bg-brand-900 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-brand-900/20 hover:bg-brand-800 transition"
@@ -166,16 +174,18 @@ function Header() {
               </button>
             </>
           ) : (
-            <Link
-              to="/login"
-              className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-bold text-brand-900 hover:bg-slate-100 transition"
-            >
-              Sign In
-            </Link>
+            <>
+              <Link
+                to="/login"
+                className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-bold text-brand-900 hover:bg-slate-100 transition"
+              >
+                Sign In
+              </Link>
+              <Link to="/contact" className="btn-primary !py-2.5 !px-5">
+                Get a Free Quote
+              </Link>
+            </>
           )}
-          <Link to="/contact" className="btn-primary !py-2.5 !px-5">
-            Get a Free Quote
-          </Link>
         </div>
 
         <button
@@ -203,7 +213,7 @@ function Header() {
               </li>
             ))}
             <li className="mt-3 flex gap-3">
-              {user ? (
+              {isDashboardRoute && user ? (
                 <>
                   <Link
                     to={user.role === "client" ? "/dashboard" : "/admin"}
