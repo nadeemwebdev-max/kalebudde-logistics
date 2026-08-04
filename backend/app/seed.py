@@ -239,18 +239,27 @@ def seed_all() -> None:
 
             # Calculate demo E-Way bill dates
             eb_date = now - timedelta(days=idx + 1)
-            # Make KL100000001 & KL100000003 expiring within 12h & 8h to trigger Telegram near-expiry alert!
+            # Make KL100000001 & KL100000003 expiring within 14h & 6h to trigger Telegram near-expiry alert!
             eb_expiry = (
                 now + timedelta(hours=14)
                 if idx == 0
                 else (now - timedelta(days=1) if idx == 1 else now + timedelta(hours=6))
             )
+            eb_status = (
+                "NEAR EXPIRY ALERT BEFORE 24 HR"
+                if idx == 0
+                else ("EXTENDED" if idx == 1 else "PENDING EXTENTION")
+            )
+            new_ext = now + timedelta(days=3) if idx == 1 else None
 
             s = Shipment(
                 **spec,
                 client_id=client.id if client else None,
+                invoice_date=now - timedelta(days=idx + 2),
                 eway_bill_date=eb_date,
                 eway_bill_expiry_date=eb_expiry,
+                eway_bill_status=eb_status,
+                new_extended_eway_bill_date=new_ext,
                 eta=now + timedelta(days=2),
             )
             db.add(s)

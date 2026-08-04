@@ -75,8 +75,11 @@ class ShipmentBase(BaseModel):
     eway_bill_number: str | None = None
     eway_bill_date: datetime | None = None
     eway_bill_expiry_date: datetime | None = None
+    eway_bill_status: str | None = "VEHICLE NUMBER UPDATED"
+    new_extended_eway_bill_date: datetime | None = None
     auto_extend_eway: bool = True
     invoice_number: str | None = None
+    invoice_date: datetime | None = None
     lr_number: str | None = None
     lr_copy_url: str | None = None
     eta: datetime | None = None
@@ -101,8 +104,11 @@ class ShipmentUpdate(BaseModel):
     eway_bill_number: str | None = None
     eway_bill_date: datetime | None = None
     eway_bill_expiry_date: datetime | None = None
+    eway_bill_status: str | None = None
+    new_extended_eway_bill_date: datetime | None = None
     auto_extend_eway: bool | None = None
     invoice_number: str | None = None
+    invoice_date: datetime | None = None
     lr_number: str | None = None
     lr_copy_url: str | None = None
     eta: datetime | None = None
@@ -127,8 +133,11 @@ class ShipmentOut(ORM):
     eway_bill_number: str | None
     eway_bill_date: datetime | None
     eway_bill_expiry_date: datetime | None
+    eway_bill_status: str | None
+    new_extended_eway_bill_date: datetime | None
     auto_extend_eway: bool
     invoice_number: str | None
+    invoice_date: datetime | None
     lr_number: str | None
     lr_copy_url: str | None
     status: ShipmentStatus

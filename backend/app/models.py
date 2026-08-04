@@ -73,8 +73,11 @@ class Shipment(Base):
     eway_bill_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
     eway_bill_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     eway_bill_expiry_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    eway_bill_status: Mapped[str | None] = mapped_column(String(64), default="VEHICLE NUMBER UPDATED", nullable=True)
+    new_extended_eway_bill_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     auto_extend_eway: Mapped[bool] = mapped_column(Boolean, default=True)
     invoice_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    invoice_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     lr_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
     lr_copy_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
