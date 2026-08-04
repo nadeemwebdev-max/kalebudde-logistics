@@ -1,32 +1,25 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
-  ArrowUpRight,
   BellRing,
   CheckCircle2,
-  Clock,
   Download,
   Edit,
   ExternalLink,
-  Eye,
-  FileCheck,
+  FileSpreadsheet,
   FileText,
   Filter,
   Inbox,
+  Lock,
   Package,
   Paperclip,
   Plus,
-  RefreshCw,
   Search,
   Send,
-  Settings,
   ShieldAlert,
-  ShieldCheck,
   Sparkles,
   Trash2,
   Truck,
-  Upload,
-  UserCheck,
   Users,
   X,
 } from "lucide-react";
@@ -99,8 +92,8 @@ function Modal({
   children: React.ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-md animate-fade-in">
-      <div className="my-8 w-full max-w-2xl overflow-hidden rounded-3xl bg-white p-7 shadow-2xl ring-1 ring-slate-900/10">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-sm animate-fade-in">
+      <div className="my-8 w-full max-w-3xl overflow-hidden rounded-2xl bg-white p-7 shadow-2xl ring-1 ring-slate-900/10">
         <div className="mb-6 flex items-start justify-between border-b border-slate-100 pb-4">
           <div>
             <h2 className="font-display text-xl font-extrabold text-slate-900">{title}</h2>
@@ -124,7 +117,7 @@ export default function AdminDashboard() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const [tab, setTab] = useState<"overview" | "shipments" | "quotes" | "blog" | "users">(
-    "overview"
+    "shipments"
   );
 
   const [stats, setStats] = useState<Stats | null>(null);
@@ -133,12 +126,20 @@ export default function AdminDashboard() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [modal, setModal] = useState<
-    null | "shipment" | "edit_shipment" | "event" | "post" | "user" | "telegram_settings"
+    null
+    | "shipment"
+    | "edit_shipment"
+    | "event"
+    | "post"
+    | "user"
+    | "telegram_settings"
+    | "upload_excel"
   >(null);
   const [activeShipment, setActiveShipment] = useState<Shipment | null>(null);
   const [toast, setToast] = useState("");
   const [uploadingLr, setUploadingLr] = useState(false);
   const [uploadedLrUrl, setUploadedLrUrl] = useState<string | null>(null);
+  const [uploadingExcel, setUploadingExcel] = useState(false);
 
   // Search and Filter State
   const [searchTerm, setSearchTerm] = useState("");
@@ -156,266 +157,339 @@ export default function AdminDashboard() {
     setTimeout(() => setToast(""), 4000);
   };
 
-  const load = useCallback(async () => {
-    const [st, sh, qt, bl, tg] = await Promise.allSettled([
-      api.get<Stats>("/api/stats"),
-      api.get<Shipment[]>("/api/shipments?limit=200"),
-      api.get<Quote[]>("/api/quotes"),
-      api.get<BlogPost[]>("/api/blog?limit=50"),
-      getTelegramConfig(),
-    ]);
-    if (st.status === "fulfilled") setStats(st.value.data);
-    if (sh.status === "fulfilled") setShipments(sh.value.data);
-    if (qt.status === "fulfilled") setQuotes(qt.value.data);
-    if (bl.status === "fulfilled") setPosts(bl.value.data);
-    if (tg.status === "fulfilled") {
-      setTgBotToken(tg.value.bot_token || "");
-      setTgChatId(tg.value.chat_id || "");
-      setTgThreshold(tg.value.threshold_hours || 48);
-    }
-    if (isAdmin) {
-      try {
-        setUsers((await api.get<User[]>("/api/users")).data);
-      } catch {
-        /* ignore */
+  const loadData = useCallback(async () => {
+    try {
+      const [st, sh, q, p] = await Promise.all([
+        api.get("/api/stats").then((r) => r.data),
+        api.get("/api/shipments?limit=200").then((r) => r.data),
+        api.get("/api/quotes").then((r) => r.data),
+        api.get("/api/blog?limit=50").then((r) => r.data),
+      ]);
+      setStats(st);
+      setShipments(sh);
+      setQuotes(q);
+      setPosts(p);
+
+      if (isAdmin) {
+        const u = await api.get("/api/users").then((r) => r.data);
+        setUsers(u);
       }
+    } catch {
+      /* handled */
+    }
+  }, [isAdmin]);
+
+  const loadTelegramConfig = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const cfg = await getTelegramConfig();
+      if (cfg) {
+        setTgBotToken(cfg.bot_token || "");
+        setTgChatId(cfg.chat_id || "");
+        setTgThreshold(cfg.threshold_hours || 48);
+      }
+    } catch {
+      /* no config set yet */
     }
   }, [isAdmin]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadData();
+    loadTelegramConfig();
+  }, [loadData, loadTelegramConfig]);
 
-  // Handle LR Copy File Upload
-  async function handleLrFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      setUploadingLr(true);
-      const res = await uploadLrCopy(file);
-      setUploadedLrUrl(res.lr_copy_url);
-      flash("LR Copy document uploaded successfully!");
-    } catch (err: any) {
-      alert("Failed to upload LR Copy: " + (err.response?.data?.detail || err.message));
-    } finally {
-      setUploadingLr(false);
-    }
-  }
-
-  async function createShipment(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = Object.fromEntries(new FormData(e.currentTarget).entries()) as any;
-    Object.keys(fd).forEach((k) => fd[k] === "" && delete fd[k]);
-    if (fd.weight_kg) fd.weight_kg = Number(fd.weight_kg);
-    if (fd.packages) fd.packages = Number(fd.packages);
-    if (fd.client_id) fd.client_id = Number(fd.client_id);
-    if (uploadedLrUrl) fd.lr_copy_url = uploadedLrUrl;
-    if (fd.eway_bill_date) fd.eway_bill_date = new Date(fd.eway_bill_date).toISOString();
-    if (fd.eway_bill_expiry_date)
-      fd.eway_bill_expiry_date = new Date(fd.eway_bill_expiry_date).toISOString();
-
-    await api.post("/api/shipments", fd);
-    setModal(null);
-    setUploadedLrUrl(null);
-    flash("Shipment created successfully");
-    load();
-  }
-
-  async function updateShipment(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!activeShipment) return;
-    const fd = Object.fromEntries(new FormData(e.currentTarget).entries()) as any;
-    Object.keys(fd).forEach((k) => fd[k] === "" && delete fd[k]);
-    if (fd.weight_kg) fd.weight_kg = Number(fd.weight_kg);
-    if (fd.packages) fd.packages = Number(fd.packages);
-    if (fd.client_id) fd.client_id = Number(fd.client_id);
-    if (uploadedLrUrl) fd.lr_copy_url = uploadedLrUrl;
-    if (fd.eway_bill_date) fd.eway_bill_date = new Date(fd.eway_bill_date).toISOString();
-    if (fd.eway_bill_expiry_date)
-      fd.eway_bill_expiry_date = new Date(fd.eway_bill_expiry_date).toISOString();
-
-    await api.patch(`/api/shipments/${activeShipment.id}`, fd);
-    setModal(null);
-    setActiveShipment(null);
-    setUploadedLrUrl(null);
-    flash("Shipment details updated");
-    load();
-  }
-
-  async function handleTriggerTelegramNotify() {
-    try {
-      setNotifyingEway(true);
-      const res = await notifyEwayExpiry();
-      if (!res.telegram_configured) {
-        alert(
-          "Telegram Bot is not configured yet! Click 'Bot Settings' to add your Token and Chat ID."
-        );
-        setModal("telegram_settings");
-        return;
-      }
-      flash(`Dispatched ${res.sent_count} Telegram alert(s) for near-expiry E-Way Bills!`);
-    } catch (err: any) {
-      alert("Failed to send Telegram alerts: " + (err.response?.data?.detail || err.message));
-    } finally {
-      setNotifyingEway(false);
-    }
-  }
-
-  async function handleTestTelegram() {
-    try {
-      setTgTesting(true);
-      await testTelegram(tgBotToken, tgChatId);
-      flash("Test message sent to Telegram successfully!");
-    } catch (err: any) {
-      alert("Telegram Test Error: " + (err.response?.data?.detail || err.message));
-    } finally {
-      setTgTesting(false);
-    }
-  }
-
-  async function handleSaveTelegramSettings(e: React.FormEvent) {
+  const saveTgConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await saveTelegramConfig(tgBotToken, tgChatId, tgThreshold);
-      flash("Telegram Bot configuration saved!");
+      flash("Telegram bot configuration saved persistently!");
       setModal(null);
     } catch (err: any) {
-      alert("Failed to save settings: " + (err.response?.data?.detail || err.message));
+      alert(err.response?.data?.detail || "Failed to save Telegram config");
     }
-  }
+  };
 
-  async function addEvent(e: React.FormEvent<HTMLFormElement>) {
+  const testTgBot = async () => {
+    setTgTesting(true);
+    try {
+      await testTelegram(tgBotToken, tgChatId);
+      flash("Telegram Test Alert sent successfully to chat!");
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Failed to send test message");
+    } finally {
+      setTgTesting(false);
+    }
+  };
+
+  const triggerEwayExpiryCheck = async () => {
+    setNotifyingEway(true);
+    try {
+      const res = await notifyEwayExpiry();
+      flash(res.message || `Dispatched ${res.notified_count} E-Way Bill expiry alerts to Telegram!`);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Error dispatching Telegram alerts");
+    } finally {
+      setNotifyingEway(false);
+    }
+  };
+
+  const createShipment = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const data = new FormData(form);
+    try {
+      await api.post("/api/shipments", {
+        consignor: data.get("consignor"),
+        consignee: data.get("consignee"),
+        origin: data.get("origin"),
+        destination: data.get("destination"),
+        commodity: data.get("commodity") || null,
+        weight_kg: data.get("weight_kg") ? Number(data.get("weight_kg")) : null,
+        packages: data.get("packages") ? Number(data.get("packages")) : null,
+        vehicle_number: data.get("vehicle_number") || null,
+        driver_name: data.get("driver_name") || null,
+        driver_phone: data.get("driver_phone") || null,
+        eway_bill_number: data.get("eway_bill_number") || null,
+        eway_bill_date: data.get("eway_bill_date") || null,
+        eway_bill_expiry_date: data.get("eway_bill_expiry_date") || null,
+        eway_bill_status: data.get("eway_bill_status") || "VEHICLE NUMBER UPDATED",
+        new_extended_eway_bill_date: data.get("new_extended_eway_bill_date") || null,
+        invoice_number: data.get("invoice_number") || null,
+        invoice_date: data.get("invoice_date") || null,
+        lr_number: data.get("lr_number") || null,
+        lr_copy_url: uploadedLrUrl || null,
+        status: data.get("status") || "booked",
+        eta: data.get("eta") || null,
+      });
+      flash("Consignment created successfully");
+      setModal(null);
+      setUploadedLrUrl(null);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Failed to create shipment");
+    }
+  };
+
+  const updateShipment = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!activeShipment) return;
-    const fd = Object.fromEntries(new FormData(e.currentTarget).entries());
-    await api.post(`/api/shipments/${activeShipment.id}/events`, fd);
-    setModal(null);
-    setActiveShipment(null);
-    flash("Tracking event added");
-    load();
-  }
+    const form = e.currentTarget;
+    const data = new FormData(form);
+    try {
+      await api.patch(`/api/shipments/${activeShipment.id}`, {
+        consignor: data.get("consignor"),
+        consignee: data.get("consignee"),
+        origin: data.get("origin"),
+        destination: data.get("destination"),
+        commodity: data.get("commodity") || null,
+        vehicle_number: data.get("vehicle_number") || null,
+        driver_name: data.get("driver_name") || null,
+        driver_phone: data.get("driver_phone") || null,
+        eway_bill_number: data.get("eway_bill_number") || null,
+        eway_bill_date: data.get("eway_bill_date") || null,
+        eway_bill_expiry_date: data.get("eway_bill_expiry_date") || null,
+        eway_bill_status: data.get("eway_bill_status") || "VEHICLE NUMBER UPDATED",
+        new_extended_eway_bill_date: data.get("new_extended_eway_bill_date") || null,
+        invoice_number: data.get("invoice_number") || null,
+        invoice_date: data.get("invoice_date") || null,
+        lr_number: data.get("lr_number") || null,
+        lr_copy_url: uploadedLrUrl || activeShipment.lr_copy_url,
+        status: data.get("status"),
+      });
+      flash("Consignment updated successfully");
+      setModal(null);
+      setActiveShipment(null);
+      setUploadedLrUrl(null);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Failed to update shipment");
+    }
+  };
 
-  async function createPost(e: React.FormEvent<HTMLFormElement>) {
+  const addEvent = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const fd = Object.fromEntries(new FormData(e.currentTarget).entries()) as any;
-    Object.keys(fd).forEach((k) => fd[k] === "" && delete fd[k]);
-    await api.post("/api/blog", fd);
-    setModal(null);
-    flash("Article published");
-    load();
-  }
+    if (!activeShipment) return;
+    const form = e.currentTarget;
+    const data = new FormData(form);
+    try {
+      await api.post(`/api/shipments/${activeShipment.id}/events`, {
+        status: data.get("status"),
+        location: data.get("location"),
+        note: data.get("note") || null,
+      });
+      flash("Tracking milestone posted");
+      setModal(null);
+      setActiveShipment(null);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Failed to add milestone");
+    }
+  };
 
-  async function createUser(e: React.FormEvent<HTMLFormElement>) {
+  const deleteShipment = async (id: number) => {
+    if (!isAdmin) {
+      alert("Permission Denied: Only Administrator accounts can delete consignment records.");
+      return;
+    }
+    if (!confirm("Are you sure you want to permanently delete this consignment?")) return;
+    try {
+      await api.delete(`/api/shipments/${id}`);
+      flash("Consignment deleted");
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Failed to delete shipment");
+    }
+  };
+
+  const handleLrFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingLr(true);
+    try {
+      const res = await uploadLrCopy(file);
+      setUploadedLrUrl(res.lr_copy_url);
+      flash("LR Document uploaded successfully");
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Failed to upload LR file");
+    } finally {
+      setUploadingLr(false);
+    }
+  };
+
+  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingExcel(true);
+    try {
+      const res = await uploadShipmentsExcel(file);
+      flash(res.message || "Excel/CSV shipments imported successfully!");
+      setModal(null);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Failed to import Excel file. Check file headers.");
+    } finally {
+      setUploadingExcel(false);
+    }
+  };
+
+  const createPost = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const fd = Object.fromEntries(new FormData(e.currentTarget).entries());
-    await api.post("/api/users", fd);
-    setModal(null);
-    flash("User created");
-    load();
-  }
+    const form = e.currentTarget;
+    const data = new FormData(form);
+    try {
+      await api.post("/api/blog", {
+        title: data.get("title"),
+        excerpt: data.get("excerpt"),
+        content: data.get("content"),
+        tags: data.get("tags") || null,
+        is_published: true,
+      });
+      flash("Article published");
+      setModal(null);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Failed to publish post");
+    }
+  };
 
-  const nearExpiryCount = shipments.filter((s) => {
-    if (s.status === "delivered" || s.status === "cancelled" || !s.eway_bill_expiry_date)
-      return false;
-    const exp = new Date(s.eway_bill_expiry_date).getTime();
-    const diffHours = (exp - Date.now()) / (1000 * 3600);
-    return diffHours <= 48;
-  }).length;
+  const createUser = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const data = new FormData(form);
+    try {
+      await api.post("/api/users", {
+        email: data.get("email"),
+        full_name: data.get("full_name"),
+        company: data.get("company") || null,
+        password: data.get("password"),
+        role: data.get("role"),
+      });
+      flash("User account created");
+      setModal(null);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Failed to create user");
+    }
+  };
 
+  const toggleQuoteHandled = async (q: Quote) => {
+    try {
+      await api.patch(`/api/quotes/${q.id}`, { handled: !q.handled });
+      loadData();
+    } catch {
+      /* fail */
+    }
+  };
+
+  // Filtered shipments
   const filteredShipments = shipments.filter((s) => {
     const matchesSearch =
-      !searchTerm ||
+      searchTerm === "" ||
       s.tracking_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.invoice_number && s.invoice_number.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (s.eway_bill_number && s.eway_bill_number.toLowerCase().includes(searchTerm.toLowerCase())) ||
       s.consignor.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.consignee.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.origin.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.destination.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (s.invoice_number && s.invoice_number.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (s.lr_number && s.lr_number.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (s.eway_bill_number && s.eway_bill_number.toLowerCase().includes(searchTerm.toLowerCase()));
+      (s.driver_name && s.driver_name.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    if (statusFilter === "all") return matchesSearch;
-    if (statusFilter === "near_expiry") {
-      if (s.status === "delivered" || s.status === "cancelled" || !s.eway_bill_expiry_date)
-        return false;
-      const exp = new Date(s.eway_bill_expiry_date).getTime();
-      return (exp - Date.now()) / (1000 * 3600) <= 48;
-    }
-    return matchesSearch && s.status === statusFilter;
+    const matchesStatus = statusFilter === "all" || s.status === statusFilter;
+    return matchesSearch && matchesStatus;
   });
 
-  const TABS = [
-    ["overview", "Overview"],
-    ["shipments", "Shipments & Docs"],
-    ["quotes", "Quote Requests"],
-    ["blog", "Blog"],
-    ...(isAdmin ? [["users", "Users"]] : []),
-  ] as const;
-
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans antialiased selection:bg-brand-500 selection:text-white">
+    <div className="min-h-screen bg-slate-100 text-slate-900 pb-24 font-sans">
       <Seo
-        title="Management Dashboard | Kalebudde Logistics"
-        description="Enterprise Logistics Management System with E-Way Bill tracking and Telegram automated alerts."
+        title="Admin Control Center | Kalebudde Logistics"
+        description="Manage pan-India freight operations, E-way bill monitoring, quotes, blogs and users."
         path="/admin"
         noindex
       />
 
+      {/* Toast Notification */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-[90] flex items-center gap-2.5 rounded-2xl bg-emerald-500 px-5 py-3.5 text-sm font-bold text-white shadow-2xl shadow-emerald-900/50 animate-bounce">
-          <CheckCircle2 size={18} /> {toast}
+        <div className="fixed bottom-6 right-6 z-[100] flex items-center gap-3 rounded-2xl bg-brand-900 text-white px-5 py-3.5 shadow-2xl border border-brand-700 animate-slide-up text-xs font-bold">
+          <Sparkles className="text-accent-400" size={16} />
+          {toast}
         </div>
       )}
 
-      {/* HERO HEADER */}
-      <header className="relative border-b border-slate-800 bg-slate-950 py-10 overflow-hidden">
-        <div className="absolute top-0 right-1/4 h-96 w-96 rounded-full bg-brand-600/10 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 right-10 h-72 w-72 rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
-
-        <div className="container-x relative z-10 flex flex-wrap items-center justify-between gap-6">
+      {/* Top Banner Header */}
+      <div className="bg-white border-b border-slate-200 py-6 shadow-sm">
+        <div className="container-x flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-500/15 px-3 py-1 text-xs font-semibold text-brand-400 border border-brand-500/20">
-                <Sparkles size={13} /> Kalebudde Enterprise OS v2.0
-              </span>
-              <span className="rounded-full bg-slate-800 px-2.5 py-0.5 text-[11px] text-slate-400">
-                Live Server
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-widest">
+              <span>Kalebudde Operations Portal</span>
+              <span>•</span>
+              <span className="text-emerald-600 font-extrabold flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Live DB Sync
               </span>
             </div>
-
-            <h1 className="mt-3 font-display text-3xl font-black tracking-tight text-white sm:text-4xl">
-              {isAdmin ? "Administrator Control Center" : "Operations Portal"}
+            <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">
+              Admin &amp; Logistics Control Panel
             </h1>
-            <p className="mt-1 text-sm text-slate-400">
-              Welcome back, <strong className="text-slate-200">{user?.full_name}</strong> · Role:{" "}
-              <span className="capitalize text-brand-400">{user?.role}</span>
-            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={handleTriggerTelegramNotify}
-              disabled={notifyingEway}
-              className={`relative flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition shadow-lg ${
-                nearExpiryCount > 0
-                  ? "bg-amber-500 text-slate-950 hover:bg-amber-400 shadow-amber-500/20"
-                  : "bg-slate-800 text-slate-200 hover:bg-slate-700"
-              }`}
-            >
-              <BellRing
-                size={16}
-                className={nearExpiryCount > 0 ? "animate-bounce text-slate-950" : "text-brand-400"}
-              />
-              {notifyingEway
-                ? "Sending..."
-                : `Telegram Alerts (${nearExpiryCount})`}
-            </button>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            {isAdmin && (
+              <button
+                onClick={() => setModal("telegram_settings")}
+                className="flex items-center gap-2 rounded-xl bg-slate-100 px-3.5 py-2.5 text-xs font-bold text-slate-700 border border-slate-300 hover:bg-slate-200 transition"
+              >
+                <BellRing size={15} className="text-brand-600" />
+                <span>Telegram Bot Alert</span>
+              </button>
+            )}
 
             <button
-              onClick={() => setModal("telegram_settings")}
-              className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/80 px-4 py-2.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition"
+              onClick={triggerEwayExpiryCheck}
+              disabled={notifyingEway}
+              className="flex items-center gap-2 rounded-xl bg-amber-500/10 px-3.5 py-2.5 text-xs font-bold text-amber-700 border border-amber-300 hover:bg-amber-500/20 transition disabled:opacity-50"
             >
-              <Settings size={15} className="text-slate-400" /> Bot Settings
+              <ShieldAlert size={15} className={notifyingEway ? "animate-spin" : ""} />
+              <span>{notifyingEway ? "Checking..." : "E-Way Bill 24h Alerts"}</span>
             </button>
 
             <button
@@ -423,233 +497,158 @@ export default function AdminDashboard() {
                 setUploadedLrUrl(null);
                 setModal("shipment");
               }}
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-xl shadow-brand-600/30 hover:brightness-110 transition"
+              className="flex items-center gap-2 rounded-xl bg-brand-900 px-4 py-2.5 text-xs font-bold text-white shadow-md hover:bg-brand-800 transition"
             >
-              <Plus size={16} /> New Shipment
+              <Plus size={16} /> New Consignment
             </button>
           </div>
-        </div>
-      </header>
-
-      {/* Near Expiry Banner Notification */}
-      {nearExpiryCount > 0 && (
-        <div className="border-b border-amber-500/20 bg-gradient-to-r from-amber-500/10 via-amber-600/15 to-transparent py-3">
-          <div className="container-x flex flex-wrap items-center justify-between gap-3 text-xs text-amber-200">
-            <div className="flex items-center gap-2.5 font-medium">
-              <ShieldAlert size={18} className="text-amber-400 shrink-0" />
-              <span>
-                <strong>Urgent Compliance Alert:</strong> {nearExpiryCount} active shipment(s) have
-                E-Way Bills expiring within 48 hours or already expired!
-              </span>
-            </div>
-            <button
-              onClick={handleTriggerTelegramNotify}
-              disabled={notifyingEway}
-              className="flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 font-bold text-slate-950 hover:bg-amber-400 transition"
-            >
-              <Send size={13} /> Send Telegram Alerts Now
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* SUB-NAVIGATION TABS */}
-      <div className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/90 backdrop-blur-md">
-        <div className="container-x flex items-center justify-between">
-          <div className="flex gap-2 overflow-x-auto py-2">
-            {TABS.map(([k, label]) => (
-              <button
-                key={k}
-                onClick={() => setTab(k as typeof tab)}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
-                  tab === k
-                    ? "bg-brand-600/20 text-brand-400 border border-brand-500/30"
-                    : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <button
-            onClick={load}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-400 hover:text-white transition"
-          >
-            <RefreshCw size={13} /> Refresh
-          </button>
         </div>
       </div>
 
-      <div className="container-x mt-6 space-y-6">
-        {/* OVERVIEW TAB */}
+      {/* Main Container */}
+      <div className="container-x mt-6">
+        {/* Navigation Tabs */}
+        <div className="flex items-center gap-2 border-b border-slate-200 pb-3 overflow-x-auto">
+          {[
+            ["overview", "Dashboard Overview", Inbox],
+            ["shipments", `Consignments (${shipments.length})`, Truck],
+            ["quotes", `Quote Inquiries (${quotes.filter((q) => !q.handled).length})`, FileText],
+            ["blog", "Blog Articles", Sparkles],
+            ...(isAdmin ? [["users", `Team Users (${users.length})`, Users]] : []),
+          ].map(([id, label, IconComponent]) => {
+            const IconElement = IconComponent as typeof Truck;
+            const active = tab === id;
+            return (
+              <button
+                key={id as string}
+                onClick={() => setTab(id as any)}
+                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition shrink-0 ${
+                  active
+                    ? "bg-white text-brand-900 shadow-sm border border-slate-300 font-extrabold"
+                    : "text-slate-600 hover:bg-white/60 hover:text-slate-900"
+                }`}
+              >
+                <IconElement size={15} className={active ? "text-accent-500" : "text-slate-400"} />
+                {label as string}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* TAB 1: OVERVIEW */}
         {tab === "overview" && stats && (
-          <>
-            {/* KPI Cards */}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-6 space-y-6">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {[
-                [
-                  Package,
-                  "Total Consignments",
-                  stats.total_shipments,
-                  "Registered shipments in system",
-                  "from-blue-500/20 to-brand-500/10 text-brand-400 border-brand-500/30",
-                ],
-                [
-                  Truck,
-                  "In Transit",
-                  stats.in_transit,
-                  "Active on-road movements",
-                  "from-cyan-500/20 to-blue-500/10 text-cyan-400 border-cyan-500/30",
-                ],
-                [
-                  CheckCircle2,
-                  "Delivered",
-                  stats.delivered,
-                  "Successfully completed",
-                  "from-emerald-500/20 to-teal-500/10 text-emerald-400 border-emerald-500/30",
-                ],
-                [
-                  ShieldAlert,
-                  "E-Way Expiry Risk",
-                  nearExpiryCount,
-                  "Expiring within 48 hours",
-                  nearExpiryCount > 0
-                    ? "from-amber-500/30 to-red-500/20 text-amber-400 border-amber-500/40 animate-pulse"
-                    : "from-slate-800 to-slate-900 text-slate-400 border-slate-800",
-                ],
-                [
-                  Inbox,
-                  "Open Quotes",
-                  stats.open_quotes,
-                  "Pending freight inquiries",
-                  "from-purple-500/20 to-indigo-500/10 text-purple-400 border-purple-500/30",
-                ],
-                [
-                  Users,
-                  "Client Accounts",
-                  stats.total_clients,
-                  "Active client logins",
-                  "from-slate-800 to-slate-800 text-slate-300 border-slate-700",
-                ],
-              ].map(([Icon, label, value, sub, cls]) => {
-                const I = Icon as typeof Package;
+                ["Total Consignments", stats.total_shipments, "Pan-India active", Package, "bg-brand-50 text-brand-700 border-brand-200"],
+                ["In Transit", stats.in_transit, "On national highways", Truck, "bg-blue-50 text-blue-700 border-blue-200"],
+                ["Delivered Clean", stats.delivered, "POD verified", CheckCircle2, "bg-emerald-50 text-emerald-700 border-emerald-200"],
+                ["Pending / On Hold", stats.on_hold, "Requires attention", AlertTriangle, "bg-rose-50 text-rose-700 border-rose-200"],
+              ].map(([t, v, sub, IconComponent, color]) => {
+                const IconElement = IconComponent as typeof Package;
                 return (
                   <div
-                    key={label as string}
-                    className={`relative overflow-hidden rounded-2xl border bg-gradient-to-br p-5 shadow-lg transition hover:scale-[1.01] ${cls as string}`}
+                    key={t as string}
+                    className={`rounded-2xl border p-5 bg-white shadow-sm flex items-start justify-between`}
                   >
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-bold uppercase tracking-wider opacity-80">
-                        {label as string}
-                      </p>
-                      <span className="rounded-xl bg-slate-900/60 p-2.5 shadow-inner">
-                        <I size={18} />
-                      </span>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{t as string}</p>
+                      <p className="mt-2 font-display text-3xl font-black text-slate-900">{v as number}</p>
+                      <p className="mt-1 text-[11px] font-medium text-slate-500">{sub as string}</p>
                     </div>
-                    <p className="mt-3 font-display text-3xl font-black text-white">
-                      {value as number}
-                    </p>
-                    <p className="mt-1 text-[11px] opacity-70">{sub as string}</p>
+                    <span className={`rounded-xl p-3 border ${color as string}`}>
+                      <IconElement size={22} />
+                    </span>
                   </div>
                 );
               })}
             </div>
 
-            {/* Quick Actions & Filters Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-950 p-4">
-              <div className="flex flex-1 items-center gap-3 min-w-[280px]">
-                <div className="relative flex-1">
-                  <Search
-                    size={16}
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500"
-                  />
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search tracking #, invoice, LR, consignee, route..."
-                    className="w-full rounded-xl border border-slate-800 bg-slate-900 pl-10 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Filter size={14} className="text-slate-400" />
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:outline-none"
-                  >
-                    <option value="all">All Statuses</option>
-                    <option value="near_expiry">⚠️ Near Expiry (&lt;48h)</option>
-                    <option value="in_transit">In Transit</option>
-                    <option value="booked">Booked</option>
-                    <option value="on_hold">On Hold</option>
-                    <option value="delivered">Delivered</option>
-                  </select>
-                </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-display text-base font-bold text-slate-900">Recent Consignments</h2>
+                <button onClick={() => setTab("shipments")} className="text-xs font-bold text-brand-600 hover:underline">
+                  View All ({shipments.length})
+                </button>
               </div>
-
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <span>Showing {filteredShipments.length} consignments</span>
-              </div>
+              <ShipmentTable
+                shipments={shipments.slice(0, 5)}
+                userRole={user?.role}
+                onEvent={(s) => {
+                  setActiveShipment(s);
+                  setModal("event");
+                }}
+                onEdit={(s) => {
+                  setActiveShipment(s);
+                  setUploadedLrUrl(s.lr_copy_url);
+                  setModal("edit_shipment");
+                }}
+                onDelete={deleteShipment}
+              />
             </div>
-
-            {/* Shipment Table */}
-            <ShipmentTable
-              shipments={filteredShipments}
-              onEvent={(s) => {
-                setActiveShipment(s);
-                setModal("event");
-              }}
-              onEdit={(s) => {
-                setActiveShipment(s);
-                setUploadedLrUrl(s.lr_copy_url);
-                setModal("edit_shipment");
-              }}
-              onDelete={async (id) => {
-                await api.delete(`/api/shipments/${id}`);
-                flash("Shipment deleted");
-                load();
-              }}
-            />
-          </>
+          </div>
         )}
 
-        {/* SHIPMENTS TAB */}
+        {/* TAB 2: SHIPMENTS TABLE WITH EXCEL/CSV IMPORT & EXPORT */}
         {tab === "shipments" && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-950 p-4">
-              <div className="relative flex-1 max-w-md">
-                <Search
-                  size={16}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500"
-                />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Filter by Tracking No, Invoice, LR, E-Way Bill, Consignee..."
-                  className="w-full rounded-xl border border-slate-800 bg-slate-900 pl-10 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none"
-                />
+          <div className="mt-6 space-y-4">
+            {/* Action Bar */}
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-wrap items-center gap-3 flex-1">
+                <div className="relative flex-1 min-w-[240px]">
+                  <Search size={16} className="absolute left-3.5 top-3 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by Invoice, E-Way Bill, Tracking No, Consignor, Consignee, Driver..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-slate-50 py-2.5 pl-10 pr-4 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="rounded-xl border border-slate-300 bg-slate-50 py-2.5 px-3 text-xs text-slate-900 font-semibold focus:outline-none"
+                >
+                  <option value="all">All Delivery Statuses</option>
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {STATUS_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:outline-none"
-              >
-                <option value="all">All Statuses</option>
-                <option value="near_expiry">⚠️ Expiring E-Way Bills</option>
-                <option value="in_transit">In Transit</option>
-                <option value="booked">Booked</option>
-                <option value="on_hold">On Hold</option>
-                <option value="delivered">Delivered</option>
-              </select>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setModal("upload_excel")}
+                  className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-sm"
+                  title="Upload Excel or CSV spreadsheet"
+                >
+                  <FileSpreadsheet size={15} /> Upload Excel/CSV
+                </button>
+                <button
+                  onClick={downloadShipmentsExcel}
+                  className="flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition shadow-sm"
+                  title="Export to Excel (.xlsx)"
+                >
+                  <Download size={14} className="text-emerald-600" /> Excel
+                </button>
+                <button
+                  onClick={downloadShipmentsCsv}
+                  className="flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition shadow-sm"
+                  title="Export to CSV (.csv)"
+                >
+                  <Download size={14} className="text-blue-600" /> CSV
+                </button>
+              </div>
             </div>
 
+            {/* Shipment Spreadsheet Table */}
             <ShipmentTable
               shipments={filteredShipments}
+              userRole={user?.role}
               onEvent={(s) => {
                 setActiveShipment(s);
                 setModal("event");
@@ -659,16 +658,12 @@ export default function AdminDashboard() {
                 setUploadedLrUrl(s.lr_copy_url);
                 setModal("edit_shipment");
               }}
-              onDelete={async (id) => {
-                await api.delete(`/api/shipments/${id}`);
-                flash("Shipment deleted");
-                load();
-              }}
+              onDelete={deleteShipment}
             />
           </div>
         )}
 
-        {/* QUOTES TAB */}
+        {/* TAB 3: QUOTES */}
         {tab === "quotes" && (
           <div className="mt-6 space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -1077,11 +1072,201 @@ export default function AdminDashboard() {
           </form>
         </Modal>
       )}
+
+      {/* EVENT MODAL */}
+      {modal === "event" && activeShipment && (
+        <Modal
+          title={`Add Tracking Update · ${activeShipment.tracking_number}`}
+          subtitle={`Route: ${activeShipment.origin} ➔ ${activeShipment.destination}`}
+          onClose={() => setModal(null)}
+        >
+          <form onSubmit={addEvent} className="space-y-4 text-slate-800">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                New Status *
+              </label>
+              <select
+                name="status"
+                required
+                defaultValue={activeShipment.status}
+                className="mt-1.5 w-full rounded-xl border border-slate-300 bg-slate-50 p-3 text-xs text-slate-900"
+              >
+                {STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {STATUS_LABELS[s]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                Current Location *
+              </label>
+              <input
+                name="location"
+                required
+                placeholder="e.g. Pune Highway Checkpoint, MH"
+                className="mt-1.5 w-full rounded-xl border border-slate-300 bg-slate-50 p-3 text-xs text-slate-900"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                Update Note / Remarks
+              </label>
+              <textarea
+                name="note"
+                rows={3}
+                placeholder="e.g. Transhipment departed hub, expected delivery on schedule."
+                className="mt-1.5 w-full rounded-xl border border-slate-300 bg-slate-50 p-3 text-xs text-slate-900"
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button className="rounded-xl bg-brand-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg hover:bg-brand-700 transition">
+                Post Tracking Update
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* ARTICLE MODAL */}
+      {modal === "post" && (
+        <Modal title="Publish Blog Article" onClose={() => setModal(null)}>
+          <form onSubmit={createPost} className="space-y-4 text-slate-800">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                Title *
+              </label>
+              <input
+                name="title"
+                required
+                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                Excerpt *
+              </label>
+              <textarea
+                name="excerpt"
+                required
+                rows={2}
+                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                Content (Markdown) *
+              </label>
+              <textarea
+                name="content"
+                required
+                rows={8}
+                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 font-mono text-xs text-slate-900"
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button className="rounded-xl bg-brand-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg">
+                Publish Article
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* USER MODAL */}
+      {modal === "user" && (
+        <Modal title="Create User Account" onClose={() => setModal(null)}>
+          <form onSubmit={createUser} className="grid gap-4 sm:grid-cols-2 text-slate-800">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                Full Name *
+              </label>
+              <input
+                name="full_name"
+                required
+                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                Company
+              </label>
+              <input
+                name="company"
+                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                Email *
+              </label>
+              <input
+                name="email"
+                type="email"
+                required
+                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                Password *
+              </label>
+              <input
+                name="password"
+                type="password"
+                required
+                minLength={8}
+                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                Role *
+              </label>
+              <select
+                name="role"
+                defaultValue="client"
+                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900"
+              >
+                <option value="client">Client — read-only access to own shipments</option>
+                <option value="staff">Staff — manage shipments, blog, quotes</option>
+                <option value="admin">Admin — full system control</option>
+              </select>
+            </div>
+            <div className="sm:col-span-2 flex justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button className="rounded-xl bg-brand-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg">
+                Create User
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }
 
-{/* ULTRA-READABLE LIGHT UI SPREADSHEET TABLE WITH 14 COLUMNS & ADMIN DELETE ENFORCEMENT */}
 function ShipmentTable({
   shipments,
   userRole,
