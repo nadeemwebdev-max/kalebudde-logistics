@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models import Shipment, ShipmentStatus
+from app.models import Shipment, ShipmentStatus, TrackingEvent
 
 
 def send_telegram_message(bot_token: str | None, chat_id: str | None, text: str) -> dict:
