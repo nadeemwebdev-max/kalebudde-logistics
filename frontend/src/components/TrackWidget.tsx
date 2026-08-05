@@ -35,7 +35,7 @@ export default function TrackWidget({ compact = false }: { compact?: boolean }) 
       const { data } = await api.get<PublicResult>(`/api/track/${code.trim()}`);
       setResult(data);
     } catch {
-      setError("We could not find that tracking number. Please check and try again.");
+      setError("We could not find that LR number, Invoice number or tracking code. Please check and try again.");
     } finally {
       setLoading(false);
     }
@@ -52,8 +52,8 @@ export default function TrackWidget({ compact = false }: { compact?: boolean }) 
           <input
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="Enter tracking number e.g. KL100000001"
-            aria-label="Tracking number"
+            placeholder="Enter LR Number, Invoice No or Tracking Code"
+            aria-label="LR or tracking number"
             className="input !pl-11"
           />
         </div>

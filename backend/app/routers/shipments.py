@@ -82,13 +82,19 @@ def parse_date_str(val: str | None) -> datetime | None:
 # ---------- public tracker ----------
 @router.get("/track/{tracking_number}", response_model=PublicTrackingOut)
 def public_track(tracking_number: str, db: Session = Depends(get_db)):
+    code = tracking_number.strip()
     s = (
         db.query(Shipment)
-        .filter(Shipment.tracking_number == tracking_number.upper().strip())
+        .filter(
+            (Shipment.tracking_number.ilike(code))
+            | (Shipment.lr_number.ilike(code))
+            | (Shipment.invoice_number.ilike(code))
+            | (Shipment.eway_bill_number.ilike(code))
+        )
         .first()
     )
     if not s:
-        raise HTTPException(status_code=404, detail="Tracking number not found")
+        raise HTTPException(status_code=404, detail="Tracking number or LR number not found")
     return s
 
 
@@ -111,6 +117,7 @@ def list_shipments(
         like = f"%{q}%"
         query = query.filter(
             Shipment.tracking_number.ilike(like)
+            | Shipment.lr_number.ilike(like)
             | Shipment.invoice_number.ilike(like)
             | Shipment.eway_bill_number.ilike(like)
             | Shipment.consignor.ilike(like)
@@ -124,6 +131,7 @@ def list_shipments(
 
 # ---------- EXCEL & CSV DATA EXPORT & SAMPLE TEMPLATE ----------
 HEADERS = [
+    "LR NUMBER",
     "INVOICE",
     "INVOICE DATE",
     "E-WAY BILL NUMBER",
@@ -138,7 +146,6 @@ HEADERS = [
     "DRIVER NAME",
     "DRIVER NO",
     "DELIVERY STATUS",
-    "TRACKING NUMBER",
 ]
 
 
@@ -158,6 +165,7 @@ def export_csv_shipments(
 
     for s in shipments:
         writer.writerow([
+            s.lr_number or s.tracking_number,
             s.invoice_number or "",
             s.invoice_date.strftime("%Y-%m-%d") if s.invoice_date else "",
             s.eway_bill_number or "",
@@ -172,7 +180,6 @@ def export_csv_shipments(
             s.driver_name or "",
             s.driver_phone or "",
             s.status.value.replace("_", " ").upper(),
-            s.tracking_number,
         ])
 
     output.seek(0)
@@ -201,6 +208,7 @@ def export_excel_shipments(
 
     for s in shipments:
         ws.append([
+            s.lr_number or s.tracking_number,
             s.invoice_number or "",
             s.invoice_date.strftime("%Y-%m-%d") if s.invoice_date else "",
             s.eway_bill_number or "",
@@ -215,7 +223,6 @@ def export_excel_shipments(
             s.driver_name or "",
             s.driver_phone or "",
             s.status.value.replace("_", " ").upper(),
-            s.tracking_number,
         ])
 
     output = io.BytesIO()
@@ -235,10 +242,11 @@ def download_sample_template():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Sample Import Template"
-    ws.append(HEADERS[:14])  # 14 spreadsheet columns
+    ws.append(HEADERS)
 
-    # 2 Sample Rows for demonstration
+    # Sample Rows for demonstration
     ws.append([
+        "LR-883910",
         "INV-2026-8801",
         "2026-08-01",
         "311099214566",
@@ -255,6 +263,7 @@ def download_sample_template():
         "IN TRANSIT",
     ])
     ws.append([
+        "LR-883911",
         "INV-2026-8802",
         "2026-08-02",
         "311099214567",
@@ -405,6 +414,7 @@ def upload_excel_csv_shipments(
                         return str(r[rk]).strip()
             return ""
 
+        lr_num = get_val(["LR NUMBER", "LR NO", "LR NUMBER / WAYBILL", "LR", "TRACKING NUMBER"])
         inv = get_val(["INVOICE", "INVOICE NUMBER", "INVOICE NO"])
         inv_date = parse_date_str(get_val(["INVOICE DATE"]))
         eway = get_val(["E-WAY BILL NUMBER", "EWAY BILL NUMBER", "E-WAY BILL NO", "EWAY BILL NO"])
@@ -426,8 +436,11 @@ def upload_excel_csv_shipments(
                 status_enum = st
                 break
 
+        tracking_code = lr_num or generate_tracking_number(db)
+
         shipment = Shipment(
-            tracking_number=generate_tracking_number(db),
+            tracking_number=tracking_code,
+            lr_number=lr_num or tracking_code,
             invoice_number=inv or f"INV-{uuid.uuid4().hex[:6].upper()}",
             invoice_date=inv_date or datetime.now(timezone.utc),
             eway_bill_number=eway or f"EWB{random.randint(100000000000, 999999999999)}",
