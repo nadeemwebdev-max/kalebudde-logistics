@@ -32,6 +32,7 @@ class UserOut(ORM):
 
 
 class UserUpdate(BaseModel):
+    email: EmailStr | None = None
     full_name: str | None = None
     company: str | None = None
     role: Role | None = None

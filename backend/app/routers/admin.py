@@ -60,8 +60,15 @@ def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     data = payload.model_dump(exclude_unset=True)
+    if new_email := data.get("email"):
+        new_email = new_email.lower().strip()
+        existing = db.query(User).filter(User.email == new_email, User.id != user_id).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="That Email / User ID is already in use by another account.")
+        data["email"] = new_email
     if pw := data.pop("password", None):
-        user.hashed_password = hash_password(pw)
+        if pw and pw.strip():
+            user.hashed_password = hash_password(pw.strip())
     if user.id == admin.id and data.get("role") and data["role"] != Role.ADMIN:
         raise HTTPException(status_code=400, detail="You cannot demote yourself")
     for k, v in data.items():

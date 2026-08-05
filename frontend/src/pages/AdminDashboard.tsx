@@ -196,11 +196,13 @@ export default function AdminDashboard() {
     | "event"
     | "post"
     | "user"
+    | "edit_user"
     | "telegram_settings"
     | "upload_excel"
   >(null);
 
   const [activeShipment, setActiveShipment] = useState<Shipment | null>(null);
+  const [activeUser, setActiveUser] = useState<User | null>(null);
   const [drawerShipment, setDrawerShipment] = useState<Shipment | null>(null);
   const [toast, setToast] = useState("");
   const [uploadingLr, setUploadingLr] = useState(false);
@@ -504,6 +506,32 @@ export default function AdminDashboard() {
       loadData();
     } catch (err: any) {
       alert(err.response?.data?.detail || "Failed to create user");
+    }
+  };
+
+  const updateUser = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!activeUser) return;
+    const form = e.currentTarget;
+    const data = new FormData(form);
+    try {
+      const payload: any = {
+        email: data.get("email"),
+        full_name: data.get("full_name"),
+        company: data.get("company") || null,
+        role: data.get("role"),
+      };
+      const pw = data.get("password") as string;
+      if (pw && pw.trim()) {
+        payload.password = pw.trim();
+      }
+      await api.patch(`/api/users/${activeUser.id}`, payload);
+      flash(`User account ${activeUser.email} updated successfully!`);
+      setModal(null);
+      setActiveUser(null);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Failed to update user account");
     }
   };
 
@@ -949,18 +977,28 @@ export default function AdminDashboard() {
                           {u.role}
                         </span>
                       </td>
-                      <td className="px-4 py-3.5 text-right">
+                      <td className="px-4 py-3.5 text-right flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => {
+                            setActiveUser(u);
+                            setModal("edit_user");
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-100 transition shadow-xs"
+                          title="Edit User ID & Reset Password"
+                        >
+                          <Pencil size={13} className="text-slate-500" /> Edit / Reset PW
+                        </button>
                         {u.email !== user?.email ? (
                           <button
                             onClick={() => deleteUser(u.id, u.email)}
                             className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-600 hover:bg-rose-100 transition shadow-xs"
                             title="Delete User Account (Admin Only)"
                           >
-                            <Trash2 size={13} /> Delete User
+                            <Trash2 size={13} /> Delete
                           </button>
                         ) : (
                           <span className="text-[10px] font-bold uppercase text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-200">
-                            Current Session
+                            You
                           </span>
                         )}
                       </td>
@@ -1584,7 +1622,7 @@ export default function AdminDashboard() {
               <input name="full_name" required className="input text-xs" />
             </div>
             <div>
-              <label className="label">Email Address (Login Username)</label>
+              <label className="label">Email Address (Login Username / User ID)</label>
               <input name="email" type="email" required className="input text-xs" />
             </div>
             <div>
@@ -1609,6 +1647,68 @@ export default function AdminDashboard() {
               </button>
               <button type="submit" className="btn-primary py-2 text-xs">
                 Create Account
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* EDIT USER & RESET PASSWORD MODAL */}
+      {modal === "edit_user" && activeUser && (
+        <Modal title="Edit User Account & Reset Password" subtitle={`Updating Account: ${activeUser.email}`} onClose={() => setModal(null)}>
+          <form onSubmit={updateUser} className="space-y-4">
+            <div>
+              <label className="label font-bold text-slate-800">Full Name</label>
+              <input name="full_name" defaultValue={activeUser.full_name} className="input text-xs" required />
+            </div>
+
+            <div>
+              <label className="label font-bold text-slate-800">Sign-in Email / User ID</label>
+              <input name="email" type="email" defaultValue={activeUser.email} className="input text-xs font-mono font-bold" required />
+              <p className="mt-1 text-[11px] text-slate-500">Updating this email changes the User ID used to sign into the system.</p>
+            </div>
+
+            <div>
+              <label className="label">Organization / Company</label>
+              <input name="company" defaultValue={activeUser.company || ""} placeholder="Kalebudde Logistics" className="input text-xs" />
+            </div>
+
+            <div>
+              <label className="label">Access Role</label>
+              <select name="role" defaultValue={activeUser.role} className="input text-xs">
+                <option value="client">Client Account (Read Own Consignments)</option>
+                <option value="staff">Staff (View / Edit / Upload / Export)</option>
+                <option value="admin">Administrator (Full Access + System Control)</option>
+              </select>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs space-y-2 text-amber-950">
+              <div>
+                <strong className="block font-bold text-amber-950 text-xs">Reset Sign-In Password:</strong>
+                <span className="text-amber-800 text-[11px]">Leave blank to keep current password, or enter a new password below to reset.</span>
+              </div>
+              <input
+                name="password"
+                type="password"
+                placeholder="Enter new password (min 6 characters)"
+                className="input text-xs bg-white font-mono"
+                minLength={6}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setModal(null);
+                  setActiveUser(null);
+                }}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button type="submit" className="btn-primary py-2 text-xs">
+                Save &amp; Update User
               </button>
             </div>
           </form>
