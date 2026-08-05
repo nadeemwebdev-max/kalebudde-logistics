@@ -307,6 +307,25 @@ export default function AdminDashboard() {
     }
   };
 
+  const deleteUser = async (id: number, email: string) => {
+    if (!isAdmin) {
+      alert("Access Denied: Only Administrator accounts can delete user accounts.");
+      return;
+    }
+    if (email === user?.email) {
+      alert("Security Constraint: You cannot delete your own active administrator account.");
+      return;
+    }
+    if (!confirm(`Are you sure you want to permanently delete user account "${email}"? This action cannot be undone.`)) return;
+    try {
+      await api.delete(`/api/users/${id}`);
+      flash(`User account ${email} deleted successfully`);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Failed to delete user account");
+    }
+  };
+
   const handleLrFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -898,11 +917,12 @@ export default function AdminDashboard() {
                     <th className="px-4 py-3.5">EMAIL ADDRESS</th>
                     <th className="px-4 py-3.5">ORGANIZATION</th>
                     <th className="px-4 py-3.5">ACCESS ROLE</th>
+                    <th className="px-4 py-3.5 text-right">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-800">
                   {users.map((u) => (
-                    <tr key={u.id} className="hover:bg-slate-50">
+                    <tr key={u.id} className="hover:bg-slate-50 transition">
                       <td className="px-4 py-3.5 font-bold text-slate-900">{u.full_name}</td>
                       <td className="px-4 py-3.5 text-slate-600 font-medium">{u.email}</td>
                       <td className="px-4 py-3.5 text-slate-600">{u.company || "Kalebudde Logistics"}</td>
@@ -918,6 +938,21 @@ export default function AdminDashboard() {
                         >
                           {u.role}
                         </span>
+                      </td>
+                      <td className="px-4 py-3.5 text-right">
+                        {u.email !== user?.email ? (
+                          <button
+                            onClick={() => deleteUser(u.id, u.email)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-600 hover:bg-rose-100 transition shadow-xs"
+                            title="Delete User Account (Admin Only)"
+                          >
+                            <Trash2 size={13} /> Delete User
+                          </button>
+                        ) : (
+                          <span className="text-[10px] font-bold uppercase text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-200">
+                            Current Session
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}
