@@ -87,13 +87,13 @@ export default function About() {
 
       {/* Founder Section */}
       <section className="bg-slate-50 py-20 border-y border-slate-200">
-        <div className="container-x grid items-center gap-12 lg:grid-cols-[380px,1fr]">
-          <figure className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-brand-900 via-brand-950 to-slate-900 p-6 shadow-2xl ring-1 ring-brand-700/40">
-            <div className="relative mx-auto flex items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-b from-slate-800/80 to-brand-950/90 p-3 shadow-inner">
+        <div className="container-x grid items-center gap-12 lg:grid-cols-[460px,1fr]">
+          <figure className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-brand-900 via-brand-950 to-slate-950 p-5 shadow-2xl ring-1 ring-brand-700/40">
+            <div className="relative mx-auto flex h-[480px] w-full items-end justify-center overflow-hidden rounded-2xl bg-gradient-to-b from-brand-900/60 to-brand-950/90 pt-4">
               <img
                 src="/images/founder.png"
                 alt="Farooque Kalebudde, Founder of Kalebudde Logistics"
-                className="h-auto max-h-[440px] w-full object-contain drop-shadow-2xl transition duration-300 hover:scale-[1.02]"
+                className="h-full w-full object-contain object-bottom scale-110 drop-shadow-2xl transition duration-300 hover:scale-[1.13]"
                 loading="lazy"
                 width={800}
                 height={1000}
@@ -102,15 +102,16 @@ export default function About() {
                   if (!target.dataset.tried) {
                     target.dataset.tried = "true";
                     target.src = "/images/founder.jpg";
+                    target.className = "h-full w-full object-cover object-top rounded-2xl";
                   }
                 }}
               />
             </div>
             <figcaption className="mt-5 text-center">
-              <p className="font-display text-xl font-extrabold text-white tracking-tight">
+              <p className="font-display text-2xl font-extrabold text-white tracking-tight">
                 Farooque Kalebudde
               </p>
-              <p className="mt-1 text-xs font-bold uppercase tracking-widest text-accent-400">
+              <p className="mt-1 text-xs font-extrabold uppercase tracking-widest text-accent-400">
                 Founder &amp; Managing Director
               </p>
             </figcaption>
