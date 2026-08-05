@@ -131,6 +131,7 @@ def list_shipments(
 
 # ---------- EXCEL & CSV DATA EXPORT & SAMPLE TEMPLATE ----------
 HEADERS = [
+    "TRACKING NUMBER",
     "LR NUMBER",
     "INVOICE",
     "INVOICE DATE",
@@ -165,7 +166,8 @@ def export_csv_shipments(
 
     for s in shipments:
         writer.writerow([
-            s.lr_number or s.tracking_number,
+            s.tracking_number,
+            s.lr_number or f"LR-{random.randint(100000, 999999)}",
             s.invoice_number or "",
             s.invoice_date.strftime("%Y-%m-%d") if s.invoice_date else "",
             s.eway_bill_number or "",
@@ -208,7 +210,8 @@ def export_excel_shipments(
 
     for s in shipments:
         ws.append([
-            s.lr_number or s.tracking_number,
+            s.tracking_number,
+            s.lr_number or f"LR-{random.randint(100000, 999999)}",
             s.invoice_number or "",
             s.invoice_date.strftime("%Y-%m-%d") if s.invoice_date else "",
             s.eway_bill_number or "",
@@ -246,6 +249,7 @@ def download_sample_template():
 
     # Sample Rows for demonstration
     ws.append([
+        "KL100000001",
         "LR-883910",
         "INV-2026-8801",
         "2026-08-01",
@@ -263,6 +267,7 @@ def download_sample_template():
         "IN TRANSIT",
     ])
     ws.append([
+        "KL100000002",
         "LR-883911",
         "INV-2026-8802",
         "2026-08-02",
@@ -308,7 +313,12 @@ def create_shipment(
     db: Session = Depends(get_db),
     user: User = Depends(require_staff),
 ):
-    s = Shipment(**payload.model_dump(), tracking_number=generate_tracking_number(db))
+    data = payload.model_dump()
+    data["tracking_number"] = generate_tracking_number(db)
+    if not data.get("lr_number") or not str(data["lr_number"]).strip():
+        data["lr_number"] = f"LR-{random.randint(100000, 999999)}"
+
+    s = Shipment(**data)
     db.add(s)
     db.flush()
     db.add(
