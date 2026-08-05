@@ -85,8 +85,17 @@ interface Quote {
   created_at: string;
 }
 
-// Helper to determine E-Way Bill Expiry Urgency
-function getEwayExpiryInfo(expiryDateStr?: string | null) {
+// Helper to determine E-Way Bill Expiry Urgency (Suppressed for Delivered/Cancelled shipments)
+function getEwayExpiryInfo(expiryDateStr?: string | null, deliveryStatus?: string | null) {
+  if (deliveryStatus === "delivered" || deliveryStatus === "cancelled") {
+    return {
+      level: "delivered",
+      text: deliveryStatus === "delivered" ? "Delivered" : "Cancelled",
+      hoursLeft: 99999,
+      badgeClass: "bg-emerald-100 text-emerald-800 font-semibold border border-emerald-300",
+      rowClass: "hover:bg-slate-50/80",
+    };
+  }
   if (!expiryDateStr) {
     return {
       level: "none",
@@ -498,9 +507,9 @@ export default function AdminDashboard() {
     }
   };
 
-  // E-Way Expiry Alert Calculation & Auto-Sort
+  // E-Way Expiry Alert Calculation & Auto-Sort (Excludes Delivered and Cancelled)
   const expiringCount = shipments.filter((s) => {
-    const info = getEwayExpiryInfo(s.eway_bill_expiry_date);
+    const info = getEwayExpiryInfo(s.eway_bill_expiry_date, s.status);
     return info.level === "expired" || info.level === "expiring_24h";
   }).length;
 
@@ -510,6 +519,7 @@ export default function AdminDashboard() {
       (s.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
       (s.eway_bill_number?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
       s.tracking_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.lr_number?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
       s.consignor.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.consignee.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.origin.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -518,20 +528,20 @@ export default function AdminDashboard() {
 
     const matchesStatus = statusFilter === "all" || s.status === statusFilter;
 
-    const ewayInfo = getEwayExpiryInfo(s.eway_bill_expiry_date);
+    const ewayInfo = getEwayExpiryInfo(s.eway_bill_expiry_date, s.status);
     const matchesEway =
       ewayFilter === "all" ||
       (ewayFilter === "expiring_24h" && (ewayInfo.level === "expiring_24h" || ewayInfo.level === "expired")) ||
       (ewayFilter === "expired" && ewayInfo.level === "expired") ||
-      (ewayFilter === "valid" && ewayInfo.level === "valid");
+      (ewayFilter === "valid" && (ewayInfo.level === "valid" || ewayInfo.level === "delivered"));
 
     return matchesSearch && matchesStatus && matchesEway;
   });
 
   if (autoSortExpiry) {
     filteredShipments = [...filteredShipments].sort((a, b) => {
-      const infoA = getEwayExpiryInfo(a.eway_bill_expiry_date);
-      const infoB = getEwayExpiryInfo(b.eway_bill_expiry_date);
+      const infoA = getEwayExpiryInfo(a.eway_bill_expiry_date, a.status);
+      const infoB = getEwayExpiryInfo(b.eway_bill_expiry_date, b.status);
       return infoA.hoursLeft - infoB.hoursLeft;
     });
   }
@@ -988,7 +998,7 @@ export default function AdminDashboard() {
             <div className="p-6 space-y-5 flex-1 bg-slate-50">
               {/* Alert Warning Banner if Expiring */}
               {(() => {
-                const info = getEwayExpiryInfo(drawerShipment.eway_bill_expiry_date);
+                const info = getEwayExpiryInfo(drawerShipment.eway_bill_expiry_date, drawerShipment.status);
                 if (info.level === "expired" || info.level === "expiring_24h") {
                   return (
                     <div className="rounded-2xl bg-rose-50 border-2 border-rose-300 p-4 flex items-start gap-3 text-xs text-rose-900 shadow-sm animate-pulse">
@@ -1084,7 +1094,7 @@ export default function AdminDashboard() {
                     <ShieldAlert size={16} className="text-amber-500" /> Compliance &amp; E-Way Bill
                   </div>
                   {(() => {
-                    const info = getEwayExpiryInfo(drawerShipment.eway_bill_expiry_date);
+                    const info = getEwayExpiryInfo(drawerShipment.eway_bill_expiry_date, drawerShipment.status);
                     return (
                       <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase ${info.badgeClass}`}>
                         {info.text}
@@ -1652,7 +1662,7 @@ function ShipmentTable({
           </thead>
           <tbody className="divide-y divide-slate-100 text-slate-800">
             {shipments.map((s) => {
-              const ewayInfo = getEwayExpiryInfo(s.eway_bill_expiry_date);
+              const ewayInfo = getEwayExpiryInfo(s.eway_bill_expiry_date, s.status);
 
               return (
                 <tr
