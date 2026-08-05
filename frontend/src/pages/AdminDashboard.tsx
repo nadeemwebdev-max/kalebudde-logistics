@@ -345,6 +345,7 @@ export default function AdminDashboard() {
 
     try {
       await api.post("/api/shipments", {
+        lr_number: data.get("lr_number") || null,
         invoice_number: data.get("invoice_number") || null,
         invoice_date: data.get("invoice_date") || null,
         eway_bill_number: data.get("eway_bill_number") || null,
@@ -379,6 +380,7 @@ export default function AdminDashboard() {
 
     try {
       await api.patch(`/api/shipments/${activeShipment.id}`, {
+        lr_number: data.get("lr_number") || null,
         invoice_number: data.get("invoice_number") || null,
         invoice_date: data.get("invoice_date") || null,
         eway_bill_number: data.get("eway_bill_number") || null,
@@ -1268,9 +1270,13 @@ export default function AdminDashboard() {
 
       {/* NEW SHIPMENT MODAL */}
       {modal === "shipment" && (
-        <Modal title="Create New Consignment Entry" subtitle="Enter tracking and compliance details" onClose={() => setModal(null)}>
+        <Modal title="Create New Consignment Entry" subtitle="Enter tracking, LR reference and compliance details" onClose={() => setModal(null)}>
           <form onSubmit={createShipment} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label font-bold text-brand-900">LR Number (Consignment No)</label>
+                <input name="lr_number" placeholder="e.g. LR-883910" className="input text-xs font-mono font-bold" />
+              </div>
               <div>
                 <label className="label">Invoice Number</label>
                 <input name="invoice_number" placeholder="e.g. INV-2026-904" className="input text-xs" />
@@ -1356,9 +1362,13 @@ export default function AdminDashboard() {
 
       {/* EDIT SHIPMENT MODAL */}
       {modal === "edit_shipment" && activeShipment && (
-        <Modal title="Edit Consignment Details" subtitle={`Updating LR: ${activeShipment.tracking_number}`} onClose={() => setModal(null)}>
+        <Modal title="Edit Consignment Details" subtitle={`Updating LR: ${activeShipment.lr_number || activeShipment.tracking_number}`} onClose={() => setModal(null)}>
           <form onSubmit={updateShipment} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label font-bold text-brand-900">LR Number (Consignment No)</label>
+                <input name="lr_number" defaultValue={activeShipment.lr_number || activeShipment.tracking_number || ""} className="input text-xs font-mono font-bold" />
+              </div>
               <div>
                 <label className="label">Invoice Number</label>
                 <input name="invoice_number" defaultValue={activeShipment.invoice_number || ""} className="input text-xs" />
