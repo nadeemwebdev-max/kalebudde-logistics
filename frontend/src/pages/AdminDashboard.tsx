@@ -3,6 +3,9 @@ import {
   AlertTriangle,
   BellRing,
   CheckCircle2,
+  ChevronRight,
+  Clock,
+  DollarSign,
   Download,
   Edit,
   ExternalLink,
@@ -20,6 +23,7 @@ import {
   Sparkles,
   Trash2,
   Truck,
+  UserCheck,
   Users,
   X,
 } from "lucide-react";
@@ -81,6 +85,56 @@ interface Quote {
   created_at: string;
 }
 
+// Helper to determine E-Way Bill Expiry Urgency
+function getEwayExpiryInfo(expiryDateStr?: string | null) {
+  if (!expiryDateStr) {
+    return {
+      level: "none",
+      text: "No Expiry",
+      hoursLeft: 9999,
+      badgeClass: "bg-slate-100 text-slate-600 border-slate-200",
+      rowClass: "",
+    };
+  }
+  const exp = new Date(expiryDateStr).getTime();
+  const now = new Date().getTime();
+  const diffHours = (exp - now) / (1000 * 60 * 60);
+
+  if (diffHours < 0) {
+    return {
+      level: "expired",
+      text: "EXPIRED",
+      hoursLeft: diffHours,
+      badgeClass: "bg-rose-600 text-white font-black animate-pulse shadow-sm shadow-rose-500/30",
+      rowClass: "bg-rose-50/80 border-l-4 border-l-rose-500 hover:bg-rose-100/70",
+    };
+  } else if (diffHours <= 24) {
+    return {
+      level: "expiring_24h",
+      text: `Exp. ${Math.max(1, Math.ceil(diffHours))} Hrs`,
+      hoursLeft: diffHours,
+      badgeClass: "bg-amber-500 text-white font-bold animate-pulse shadow-sm shadow-amber-500/30",
+      rowClass: "bg-amber-50/80 border-l-4 border-l-amber-500 hover:bg-amber-100/70",
+    };
+  } else if (diffHours <= 48) {
+    return {
+      level: "caution",
+      text: `Exp. ${Math.ceil(diffHours / 24)} Days`,
+      hoursLeft: diffHours,
+      badgeClass: "bg-yellow-100 text-yellow-800 font-bold border border-yellow-300",
+      rowClass: "hover:bg-yellow-50/40",
+    };
+  } else {
+    return {
+      level: "valid",
+      text: "Valid",
+      hoursLeft: diffHours,
+      badgeClass: "bg-emerald-100 text-emerald-800 font-semibold border border-emerald-300",
+      rowClass: "hover:bg-slate-50/80",
+    };
+  }
+}
+
 function Modal({
   title,
   subtitle,
@@ -136,15 +190,19 @@ export default function AdminDashboard() {
     | "telegram_settings"
     | "upload_excel"
   >(null);
+
   const [activeShipment, setActiveShipment] = useState<Shipment | null>(null);
+  const [drawerShipment, setDrawerShipment] = useState<Shipment | null>(null);
   const [toast, setToast] = useState("");
   const [uploadingLr, setUploadingLr] = useState(false);
   const [uploadedLrUrl, setUploadedLrUrl] = useState<string | null>(null);
   const [uploadingExcel, setUploadingExcel] = useState(false);
 
-  // Search and Filter State
+  // Search, Filter and Auto-Sort State
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [ewayFilter, setEwayFilter] = useState<"all" | "expiring_24h" | "expired" | "valid">("all");
+  const [autoSortExpiry, setAutoSortExpiry] = useState<boolean>(true);
 
   // Telegram Config State
   const [tgBotToken, setTgBotToken] = useState("");
@@ -222,16 +280,61 @@ export default function AdminDashboard() {
     }
   };
 
-  const triggerEwayExpiryCheck = async () => {
+  const triggerEwayNotification = async () => {
     setNotifyingEway(true);
     try {
       const res = await notifyEwayExpiry();
-      flash(res.message || `Dispatched ${res.notified_count} E-Way Bill expiry alerts to Telegram!`);
-      loadData();
+      flash(res.message || "E-Way Bill Expiry notifications dispatched to Telegram!");
     } catch (err: any) {
-      alert(err.response?.data?.detail || "Error dispatching Telegram alerts");
+      alert(err.response?.data?.detail || "Failed to send E-Way Bill notifications");
     } finally {
       setNotifyingEway(false);
+    }
+  };
+
+  const deleteShipment = async (id: number) => {
+    if (!isAdmin) {
+      alert("Access Denied: Only Administrator accounts can delete consignment entries.");
+      return;
+    }
+    if (!confirm("Are you sure you want to permanently delete this consignment entry? This action cannot be undone.")) return;
+    try {
+      await api.delete(`/api/shipments/${id}`);
+      flash("Consignment entry deleted successfully");
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Failed to delete shipment record");
+    }
+  };
+
+  const handleLrFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingLr(true);
+    try {
+      const res = await uploadLrCopy(file);
+      setUploadedLrUrl(res.lr_copy_url);
+      flash("LR Copy document uploaded successfully");
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Failed to upload LR Copy");
+    } finally {
+      setUploadingLr(false);
+    }
+  };
+
+  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingExcel(true);
+    try {
+      const res = await uploadShipmentsExcel(file);
+      flash(res.message || `Successfully imported ${res.imported_count} shipments!`);
+      setModal(null);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Failed to import Excel file. Check file headers.");
+    } finally {
+      setUploadingExcel(false);
     }
   };
 
@@ -239,31 +342,27 @@ export default function AdminDashboard() {
     e.preventDefault();
     const form = e.currentTarget;
     const data = new FormData(form);
+
     try {
       await api.post("/api/shipments", {
-        consignor: data.get("consignor"),
-        consignee: data.get("consignee"),
-        origin: data.get("origin"),
-        destination: data.get("destination"),
-        commodity: data.get("commodity") || null,
-        weight_kg: data.get("weight_kg") ? Number(data.get("weight_kg")) : null,
-        packages: data.get("packages") ? Number(data.get("packages")) : null,
-        vehicle_number: data.get("vehicle_number") || null,
-        driver_name: data.get("driver_name") || null,
-        driver_phone: data.get("driver_phone") || null,
+        invoice_number: data.get("invoice_number") || null,
+        invoice_date: data.get("invoice_date") || null,
         eway_bill_number: data.get("eway_bill_number") || null,
         eway_bill_date: data.get("eway_bill_date") || null,
         eway_bill_expiry_date: data.get("eway_bill_expiry_date") || null,
         eway_bill_status: data.get("eway_bill_status") || "VEHICLE NUMBER UPDATED",
         new_extended_eway_bill_date: data.get("new_extended_eway_bill_date") || null,
-        invoice_number: data.get("invoice_number") || null,
-        invoice_date: data.get("invoice_date") || null,
-        lr_number: data.get("lr_number") || null,
-        lr_copy_url: uploadedLrUrl || null,
+        origin: data.get("origin"),
+        destination: data.get("destination"),
+        consignor: data.get("consignor"),
+        consignee: data.get("consignee"),
+        driver_name: data.get("driver_name") || null,
+        driver_phone: data.get("driver_phone") || null,
         status: data.get("status") || "booked",
-        eta: data.get("eta") || null,
+        lr_copy_url: uploadedLrUrl,
       });
-      flash("Consignment created successfully");
+
+      flash("New consignment entry created");
       setModal(null);
       setUploadedLrUrl(null);
       loadData();
@@ -277,28 +376,27 @@ export default function AdminDashboard() {
     if (!activeShipment) return;
     const form = e.currentTarget;
     const data = new FormData(form);
+
     try {
       await api.patch(`/api/shipments/${activeShipment.id}`, {
-        consignor: data.get("consignor"),
-        consignee: data.get("consignee"),
-        origin: data.get("origin"),
-        destination: data.get("destination"),
-        commodity: data.get("commodity") || null,
-        vehicle_number: data.get("vehicle_number") || null,
-        driver_name: data.get("driver_name") || null,
-        driver_phone: data.get("driver_phone") || null,
+        invoice_number: data.get("invoice_number") || null,
+        invoice_date: data.get("invoice_date") || null,
         eway_bill_number: data.get("eway_bill_number") || null,
         eway_bill_date: data.get("eway_bill_date") || null,
         eway_bill_expiry_date: data.get("eway_bill_expiry_date") || null,
         eway_bill_status: data.get("eway_bill_status") || "VEHICLE NUMBER UPDATED",
         new_extended_eway_bill_date: data.get("new_extended_eway_bill_date") || null,
-        invoice_number: data.get("invoice_number") || null,
-        invoice_date: data.get("invoice_date") || null,
-        lr_number: data.get("lr_number") || null,
-        lr_copy_url: uploadedLrUrl || activeShipment.lr_copy_url,
+        origin: data.get("origin"),
+        destination: data.get("destination"),
+        consignor: data.get("consignor"),
+        consignee: data.get("consignee"),
+        driver_name: data.get("driver_name") || null,
+        driver_phone: data.get("driver_phone") || null,
         status: data.get("status"),
+        lr_copy_url: uploadedLrUrl || activeShipment.lr_copy_url,
       });
-      flash("Consignment updated successfully");
+
+      flash("Consignment record updated successfully");
       setModal(null);
       setActiveShipment(null);
       setUploadedLrUrl(null);
@@ -313,64 +411,29 @@ export default function AdminDashboard() {
     if (!activeShipment) return;
     const form = e.currentTarget;
     const data = new FormData(form);
+
     try {
       await api.post(`/api/shipments/${activeShipment.id}/events`, {
         status: data.get("status"),
         location: data.get("location"),
-        note: data.get("note") || null,
+        note: data.get("note"),
       });
-      flash("Tracking milestone posted");
+
+      flash("Tracking milestone event added");
       setModal(null);
       setActiveShipment(null);
       loadData();
     } catch (err: any) {
-      alert(err.response?.data?.detail || "Failed to add milestone");
+      alert(err.response?.data?.detail || "Failed to add event");
     }
   };
 
-  const deleteShipment = async (id: number) => {
-    if (!isAdmin) {
-      alert("Permission Denied: Only Administrator accounts can delete consignment records.");
-      return;
-    }
-    if (!confirm("Are you sure you want to permanently delete this consignment?")) return;
+  const toggleQuoteHandled = async (q: Quote) => {
     try {
-      await api.delete(`/api/shipments/${id}`);
-      flash("Consignment deleted");
+      await api.patch(`/api/quotes/${q.id}`, { handled: !q.handled });
       loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.detail || "Failed to delete shipment");
-    }
-  };
-
-  const handleLrFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadingLr(true);
-    try {
-      const res = await uploadLrCopy(file);
-      setUploadedLrUrl(res.lr_copy_url);
-      flash("LR Document uploaded successfully");
-    } catch (err: any) {
-      alert(err.response?.data?.detail || "Failed to upload LR file");
-    } finally {
-      setUploadingLr(false);
-    }
-  };
-
-  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadingExcel(true);
-    try {
-      const res = await uploadShipmentsExcel(file);
-      flash(res.message || "Excel/CSV shipments imported successfully!");
-      setModal(null);
-      loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.detail || "Failed to import Excel file. Check file headers.");
-    } finally {
-      setUploadingExcel(false);
+    } catch {
+      /* handled */
     }
   };
 
@@ -414,144 +477,151 @@ export default function AdminDashboard() {
     }
   };
 
-  const toggleQuoteHandled = async (q: Quote) => {
-    try {
-      await api.patch(`/api/quotes/${q.id}`, { handled: !q.handled });
-      loadData();
-    } catch {
-      /* fail */
-    }
-  };
+  // E-Way Expiry Alert Calculation & Auto-Sort
+  const expiringCount = shipments.filter((s) => {
+    const info = getEwayExpiryInfo(s.eway_bill_expiry_date);
+    return info.level === "expired" || info.level === "expiring_24h";
+  }).length;
 
-  // Filtered shipments
-  const filteredShipments = shipments.filter((s) => {
+  let filteredShipments = shipments.filter((s) => {
     const matchesSearch =
-      searchTerm === "" ||
+      !searchTerm ||
+      (s.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
+      (s.eway_bill_number?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
       s.tracking_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (s.invoice_number && s.invoice_number.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (s.eway_bill_number && s.eway_bill_number.toLowerCase().includes(searchTerm.toLowerCase())) ||
       s.consignor.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.consignee.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.origin.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.destination.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (s.driver_name && s.driver_name.toLowerCase().includes(searchTerm.toLowerCase()));
+      (s.driver_name?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false);
 
     const matchesStatus = statusFilter === "all" || s.status === statusFilter;
-    return matchesSearch && matchesStatus;
+
+    const ewayInfo = getEwayExpiryInfo(s.eway_bill_expiry_date);
+    const matchesEway =
+      ewayFilter === "all" ||
+      (ewayFilter === "expiring_24h" && (ewayInfo.level === "expiring_24h" || ewayInfo.level === "expired")) ||
+      (ewayFilter === "expired" && ewayInfo.level === "expired") ||
+      (ewayFilter === "valid" && ewayInfo.level === "valid");
+
+    return matchesSearch && matchesStatus && matchesEway;
   });
 
-  return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 pb-24 font-sans">
-      <Seo
-        title="Admin Control Center | Kalebudde Logistics"
-        description="Manage pan-India freight operations, E-way bill monitoring, quotes, blogs and users."
-        path="/admin"
-        noindex
-      />
+  if (autoSortExpiry) {
+    filteredShipments = [...filteredShipments].sort((a, b) => {
+      const infoA = getEwayExpiryInfo(a.eway_bill_expiry_date);
+      const infoB = getEwayExpiryInfo(b.eway_bill_expiry_date);
+      return infoA.hoursLeft - infoB.hoursLeft;
+    });
+  }
 
-      {/* Toast Notification */}
+  return (
+    <>
+      <Seo title="Admin Operations Dashboard | Kalebudde Logistics" description="Management portal" path="/admin" />
+
+      {/* Top Notification Toast */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-[100] flex items-center gap-3 rounded-2xl bg-brand-900 text-white px-5 py-3.5 shadow-2xl border border-brand-700 animate-slide-up text-xs font-bold">
-          <Sparkles className="text-accent-400" size={16} />
-          {toast}
+        <div className="fixed top-20 right-6 z-[100] flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-xs font-bold text-white shadow-2xl animate-fade-in">
+          <CheckCircle2 size={16} /> {toast}
         </div>
       )}
 
-      {/* Top Banner Header */}
-      <div className="bg-white border-b border-slate-200 py-6 shadow-sm">
-        <div className="container-x flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      {/* Header Banner */}
+      <section className="bg-brand-950 py-10 text-white border-b border-brand-900">
+        <div className="container-x flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-widest">
-              <span>Kalebudde Operations Portal</span>
-              <span>•</span>
-              <span className="text-emerald-600 font-extrabold flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Live DB Sync
-              </span>
+            <div className="flex items-center gap-2 text-accent-400 text-xs font-extrabold uppercase tracking-widest">
+              <Sparkles size={14} /> Kalebudde Logistics Management Platform
             </div>
-            <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">
-              Admin &amp; Logistics Control Panel
-            </h1>
+            <h1 className="h2 mt-1 text-white">Operations &amp; Consignment Control</h1>
+            <p className="mt-1 text-xs text-brand-200">
+              Logged in as <strong className="text-white">{user?.full_name}</strong> ({user?.email}) &bull;{" "}
+              <span className="capitalize font-bold text-accent-400">{user?.role} Access</span>
+            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Top E-Way Bill Expiry Bell Icon with Red Badge */}
+            <button
+              onClick={() => setEwayFilter(ewayFilter === "expiring_24h" ? "all" : "expiring_24h")}
+              className={`relative flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold shadow transition ${
+                expiringCount > 0
+                  ? "bg-rose-600 text-white animate-pulse hover:bg-rose-700"
+                  : "bg-brand-900 border border-brand-800 text-brand-100 hover:bg-brand-800"
+              }`}
+              title="Filter by E-Way Bills expiring in <= 24 hours"
+            >
+              <BellRing size={16} />
+              <span>24h Alerts</span>
+              {expiringCount > 0 && (
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] font-black text-rose-600">
+                  {expiringCount}
+                </span>
+              )}
+            </button>
+
             {isAdmin && (
               <button
                 onClick={() => setModal("telegram_settings")}
-                className="flex items-center gap-2 rounded-xl bg-slate-100 px-3.5 py-2.5 text-xs font-bold text-slate-700 border border-slate-300 hover:bg-slate-200 transition"
+                className="flex items-center gap-2 rounded-xl border border-blue-400/30 bg-blue-900/50 px-3.5 py-2 text-xs font-bold text-blue-200 hover:bg-blue-900/80 transition"
               >
-                <BellRing size={15} className="text-brand-600" />
-                <span>Telegram Bot Alert</span>
+                <Send size={14} className="text-blue-400" /> Telegram Bot
               </button>
             )}
-
-            <button
-              onClick={triggerEwayExpiryCheck}
-              disabled={notifyingEway}
-              className="flex items-center gap-2 rounded-xl bg-amber-500/10 px-3.5 py-2.5 text-xs font-bold text-amber-700 border border-amber-300 hover:bg-amber-500/20 transition disabled:opacity-50"
-            >
-              <ShieldAlert size={15} className={notifyingEway ? "animate-spin" : ""} />
-              <span>{notifyingEway ? "Checking..." : "E-Way Bill 24h Alerts"}</span>
-            </button>
 
             <button
               onClick={() => {
                 setUploadedLrUrl(null);
                 setModal("shipment");
               }}
-              className="flex items-center gap-2 rounded-xl bg-brand-900 px-4 py-2.5 text-xs font-bold text-white shadow-md hover:bg-brand-800 transition"
+              className="flex items-center gap-2 rounded-xl bg-accent-500 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-accent-500/30 hover:bg-accent-600 transition"
             >
-              <Plus size={16} /> New Consignment
+              <Plus size={15} /> New Consignment
             </button>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Main Container */}
-      <div className="container-x mt-6">
-        {/* Navigation Tabs */}
-        <div className="flex items-center gap-2 border-b border-slate-200 pb-3 overflow-x-auto">
+      {/* Navigation Tabs */}
+      <section className="bg-white border-b border-slate-200">
+        <div className="container-x flex overflow-x-auto gap-2 py-3 text-xs font-bold">
           {[
-            ["overview", "Dashboard Overview", Inbox],
-            ["shipments", `Consignments (${shipments.length})`, Truck],
-            ["quotes", `Quote Inquiries (${quotes.filter((q) => !q.handled).length})`, FileText],
-            ["blog", "Blog Articles", Sparkles],
-            ...(isAdmin ? [["users", `Team Users (${users.length})`, Users]] : []),
-          ].map(([id, label, IconComponent]) => {
-            const IconElement = IconComponent as typeof Truck;
-            const active = tab === id;
-            return (
-              <button
-                key={id as string}
-                onClick={() => setTab(id as any)}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition shrink-0 ${
-                  active
-                    ? "bg-white text-brand-900 shadow-sm border border-slate-300 font-extrabold"
-                    : "text-slate-600 hover:bg-white/60 hover:text-slate-900"
-                }`}
-              >
-                <IconElement size={15} className={active ? "text-accent-500" : "text-slate-400"} />
-                {label as string}
-              </button>
-            );
-          })}
+            ["overview", "Overview & Metrics", Package],
+            ["shipments", `Consignments Grid (${shipments.length})`, Truck],
+            ["quotes", `Quote Inquiries (${quotes.filter((q) => !q.handled).length})`, Inbox],
+            ["blog", "News & Articles", FileText],
+            ...(isAdmin ? [["users", "Team Accounts", Users]] : []),
+          ].map(([id, label, IconComponent]: any) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 transition whitespace-nowrap ${
+                tab === id ? "bg-brand-900 text-white shadow" : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <IconComponent size={15} />
+              {label}
+            </button>
+          ))}
         </div>
+      </section>
 
+      {/* Main Content */}
+      <section className="container-x py-8 min-h-[600px]">
         {/* TAB 1: OVERVIEW */}
         {tab === "overview" && stats && (
-          <div className="mt-6 space-y-6">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-6">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
               {[
-                ["Total Consignments", stats.total_shipments, "Pan-India active", Package, "bg-brand-50 text-brand-700 border-brand-200"],
-                ["In Transit", stats.in_transit, "On national highways", Truck, "bg-blue-50 text-blue-700 border-blue-200"],
-                ["Delivered Clean", stats.delivered, "POD verified", CheckCircle2, "bg-emerald-50 text-emerald-700 border-emerald-200"],
-                ["Pending / On Hold", stats.on_hold, "Requires attention", AlertTriangle, "bg-rose-50 text-rose-700 border-rose-200"],
-              ].map(([t, v, sub, IconComponent, color]) => {
-                const IconElement = IconComponent as typeof Package;
+                ["Active Shipments", stats.total_shipments, "Total logged", Package, "bg-brand-50 text-brand-700 border-brand-200"],
+                ["In Transit", stats.in_transit, "On road", Truck, "bg-blue-50 text-blue-700 border-blue-200"],
+                ["Delivered", stats.delivered, "Completed", CheckCircle2, "bg-emerald-50 text-emerald-700 border-emerald-200"],
+                ["Expiring E-Way", expiringCount, "Next 24 Hours", ShieldAlert, expiringCount > 0 ? "bg-rose-50 text-rose-700 border-rose-300" : "bg-slate-50 text-slate-700 border-slate-200"],
+                ["Open Quotes", stats.open_quotes, "Pending reply", Inbox, "bg-amber-50 text-amber-700 border-amber-200"],
+                ["Team / Clients", stats.total_clients, "Registered", Users, "bg-purple-50 text-purple-700 border-purple-200"],
+              ].map(([t, v, sub, IconElement, color]: any) => {
                 return (
-                  <div
-                    key={t as string}
-                    className={`rounded-2xl border p-5 bg-white shadow-sm flex items-start justify-between`}
-                  >
+                  <div key={t as string} className="rounded-2xl border p-5 bg-white shadow-sm flex items-start justify-between">
                     <div>
                       <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{t as string}</p>
                       <p className="mt-2 font-display text-3xl font-black text-slate-900">{v as number}</p>
@@ -567,7 +637,7 @@ export default function AdminDashboard() {
 
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-display text-base font-bold text-slate-900">Recent Consignments</h2>
+                <h2 className="font-display text-base font-bold text-slate-900">Recent Active Consignments</h2>
                 <button onClick={() => setTab("shipments")} className="text-xs font-bold text-brand-600 hover:underline">
                   View All ({shipments.length})
                 </button>
@@ -575,6 +645,7 @@ export default function AdminDashboard() {
               <ShipmentTable
                 shipments={shipments.slice(0, 5)}
                 userRole={user?.role}
+                onSelectDrawer={(s) => setDrawerShipment(s)}
                 onEvent={(s) => {
                   setActiveShipment(s);
                   setModal("event");
@@ -590,23 +661,54 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* TAB 2: SHIPMENTS TABLE WITH EXCEL/CSV IMPORT & EXPORT */}
+        {/* TAB 2: SHIPMENTS TABLE (CLEAN GLOBAL VIEW + ALERTS + AUTO-SORT) */}
         {tab === "shipments" && (
-          <div className="mt-6 space-y-4">
-            {/* Action Bar */}
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex flex-wrap items-center gap-3 flex-1">
-                <div className="relative flex-1 min-w-[240px]">
+          <div className="space-y-4">
+            {/* E-Way Bill Expiry Alert Banner */}
+            {expiringCount > 0 && (
+              <div className="rounded-2xl bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 p-4 text-white shadow-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fade-in">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-xl bg-white/20 p-2.5 backdrop-blur-md">
+                    <ShieldAlert size={24} className="text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-extrabold text-sm text-white">
+                      ⚠️ ATTENTION: {expiringCount} E-Way Bill(s) Expiring or Expired!
+                    </h3>
+                    <p className="text-xs text-rose-100 mt-0.5">
+                      Check transit status or extend validity to avoid heavy penalty fees. Urgent bills are automatically sorted to the top.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={triggerEwayNotification}
+                    disabled={notifyingEway}
+                    className="flex items-center gap-1.5 rounded-xl bg-white px-3.5 py-2 text-xs font-bold text-rose-700 shadow hover:bg-rose-50 transition"
+                  >
+                    <BellRing size={14} /> {notifyingEway ? "Sending..." : "Send Telegram Alert"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Action & Filter Bar */}
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-wrap items-center gap-2.5 flex-1">
+                {/* Search */}
+                <div className="relative flex-1 min-w-[220px]">
                   <Search size={16} className="absolute left-3.5 top-3 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="Search by Invoice, E-Way Bill, Tracking No, Consignor, Consignee, Driver..."
+                    placeholder="Search LR Number, E-Way Bill, Invoice, Consignor, Destination..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full rounded-xl border border-slate-300 bg-slate-50 py-2.5 pl-10 pr-4 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                   />
                 </div>
 
+                {/* Status Filter */}
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
@@ -619,8 +721,39 @@ export default function AdminDashboard() {
                     </option>
                   ))}
                 </select>
+
+                {/* E-Way Expiry Filter */}
+                <select
+                  value={ewayFilter}
+                  onChange={(e) => setEwayFilter(e.target.value as any)}
+                  className="rounded-xl border border-slate-300 bg-slate-50 py-2.5 px-3 text-xs text-slate-900 font-bold focus:outline-none"
+                >
+                  <option value="all">All E-Way Bills</option>
+                  <option value="expiring_24h">⚠️ Expiring in &lt;= 24 Hours</option>
+                  <option value="expired">🔴 Expired</option>
+                  <option value="valid">🟢 Valid</option>
+                </select>
+
+                {/* Auto-Sort Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setAutoSortExpiry(!autoSortExpiry)}
+                  className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition ${
+                    autoSortExpiry
+                      ? "border-amber-400 bg-amber-50 text-amber-900"
+                      : "border-slate-300 bg-slate-50 text-slate-600"
+                  }`}
+                  title="Auto-sort table by E-Way Bill expiry date urgency"
+                >
+                  <Clock size={14} className={autoSortExpiry ? "text-amber-600" : "text-slate-400"} />
+                  <span>Urgency Sort</span>
+                  <span className={`rounded-full px-1.5 py-0.2 text-[9px] font-black uppercase ${autoSortExpiry ? "bg-amber-500 text-white" : "bg-slate-300 text-slate-700"}`}>
+                    {autoSortExpiry ? "ON" : "OFF"}
+                  </span>
+                </button>
               </div>
 
+              {/* Data Tools */}
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setModal("upload_excel")}
@@ -646,10 +779,11 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Shipment Spreadsheet Table */}
+            {/* Global Tracking Table */}
             <ShipmentTable
               shipments={filteredShipments}
               userRole={user?.role}
+              onSelectDrawer={(s) => setDrawerShipment(s)}
               onEvent={(s) => {
                 setActiveShipment(s);
                 setModal("event");
@@ -666,7 +800,7 @@ export default function AdminDashboard() {
 
         {/* TAB 3: QUOTES */}
         {tab === "quotes" && (
-          <div className="mt-6 space-y-4">
+          <div className="space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="font-display text-lg font-bold text-slate-900 mb-4">Quote Inquiries &amp; Customer Messages</h2>
               {quotes.length === 0 ? (
@@ -711,7 +845,7 @@ export default function AdminDashboard() {
 
         {/* TAB 4: BLOG */}
         {tab === "blog" && (
-          <div className="mt-6 space-y-4">
+          <div className="space-y-4">
             <div className="flex justify-between items-center rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <h2 className="font-display text-base font-bold text-slate-900">Blog Articles ({posts.length})</h2>
               <button
@@ -743,37 +877,36 @@ export default function AdminDashboard() {
 
         {/* TAB 5: USERS (ADMIN ONLY) */}
         {tab === "users" && isAdmin && (
-          <div className="mt-6 space-y-4">
+          <div className="space-y-4">
             <div className="flex justify-between items-center rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <h2 className="font-display text-base font-bold text-slate-900">Team Accounts &amp; Access Roles</h2>
               <button
                 onClick={() => setModal("user")}
                 className="rounded-xl bg-brand-900 px-4 py-2 text-xs font-bold text-white shadow hover:bg-brand-800"
               >
-                + Add User
+                + Add User Account
               </button>
             </div>
+
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <table className="w-full text-left text-xs">
-                <thead className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500 font-bold">
+                <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase text-slate-600">
                   <tr>
-                    <th className="px-5 py-3.5">User</th>
-                    <th className="px-5 py-3.5">Company</th>
-                    <th className="px-5 py-3.5">Role</th>
-                    <th className="px-5 py-3.5">Status</th>
+                    <th className="px-4 py-3.5">FULL NAME</th>
+                    <th className="px-4 py-3.5">EMAIL ADDRESS</th>
+                    <th className="px-4 py-3.5">ORGANIZATION</th>
+                    <th className="px-4 py-3.5">ACCESS ROLE</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 text-slate-800">
                   {users.map((u) => (
                     <tr key={u.id} className="hover:bg-slate-50">
-                      <td className="px-5 py-4">
-                        <p className="font-bold text-slate-900">{u.full_name}</p>
-                        <p className="text-xs text-slate-500">{u.email}</p>
-                      </td>
-                      <td className="px-5 py-4 text-slate-600">{u.company || "—"}</td>
-                      <td className="px-5 py-4">
+                      <td className="px-4 py-3.5 font-bold text-slate-900">{u.full_name}</td>
+                      <td className="px-4 py-3.5 text-slate-600 font-medium">{u.email}</td>
+                      <td className="px-4 py-3.5 text-slate-600">{u.company || "Kalebudde Logistics"}</td>
+                      <td className="px-4 py-3.5">
                         <span
-                          className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${
                             u.role === "admin"
                               ? "bg-purple-100 text-purple-800"
                               : u.role === "staff"
@@ -784,9 +917,6 @@ export default function AdminDashboard() {
                           {u.role}
                         </span>
                       </td>
-                      <td className="px-5 py-4">
-                        <span className="text-xs font-bold text-emerald-600">Active</span>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -794,7 +924,218 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
-      </div>
+      </section>
+
+      {/* SLIDE-OUT DETAIL PANEL */}
+      {drawerShipment && (
+        <div className="fixed inset-0 z-[90] flex justify-end bg-slate-900/40 backdrop-blur-xs transition-opacity animate-fade-in">
+          <div className="w-full max-w-xl bg-white h-full shadow-2xl overflow-y-auto flex flex-col border-l border-slate-200">
+            {/* Header */}
+            <div className="p-6 border-b border-slate-200 bg-brand-950 text-white flex items-center justify-between sticky top-0 z-10">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-accent-400">Consignment Details</span>
+                <h3 className="font-display text-xl font-extrabold text-white flex items-center gap-2 mt-0.5">
+                  <Package size={20} className="text-accent-400" />
+                  {drawerShipment.tracking_number}
+                </h3>
+              </div>
+              <button
+                onClick={() => setDrawerShipment(null)}
+                className="rounded-full p-2 text-brand-200 hover:bg-brand-900 hover:text-white transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content Cards */}
+            <div className="p-6 space-y-5 flex-1 bg-slate-50">
+              {/* Alert Warning Banner if Expiring */}
+              {(() => {
+                const info = getEwayExpiryInfo(drawerShipment.eway_bill_expiry_date);
+                if (info.level === "expired" || info.level === "expiring_24h") {
+                  return (
+                    <div className="rounded-2xl bg-rose-50 border-2 border-rose-300 p-4 flex items-start gap-3 text-xs text-rose-900 shadow-sm animate-pulse">
+                      <AlertTriangle size={20} className="text-rose-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="font-bold text-rose-950 block">CRITICAL E-WAY BILL ALERT ({info.text})</strong>
+                        This consignment's E-Way bill is nearing or past its validity window. Send a Telegram notification or update the extended expiry date.
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
+              {/* CARD 1: Financials Card */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+                <div className="flex items-center gap-2 text-brand-900 font-extrabold text-xs uppercase tracking-wider pb-2 border-b border-slate-100">
+                  <DollarSign size={16} className="text-brand-600" /> Financials &amp; Invoice Info
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <span className="text-slate-400 font-medium block">Invoice Number</span>
+                    <strong className="font-mono text-slate-900 font-bold text-sm">{drawerShipment.invoice_number || "—"}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-medium block">Invoice Date</span>
+                    <strong className="text-slate-800 font-semibold">{fmtDateOnly(drawerShipment.invoice_date)}</strong>
+                  </div>
+                </div>
+                {drawerShipment.lr_copy_url && (
+                  <div className="pt-2">
+                    <a
+                      href={drawerShipment.lr_copy_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-xl bg-brand-50 border border-brand-200 px-4 py-2 text-xs font-bold text-brand-700 hover:bg-brand-100 transition"
+                    >
+                      <Paperclip size={14} /> Download Attached LR Copy Document
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* CARD 2: Transit Card */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+                <div className="flex items-center gap-2 text-brand-900 font-extrabold text-xs uppercase tracking-wider pb-2 border-b border-slate-100">
+                  <Truck size={16} className="text-brand-600" /> Transit &amp; Route Logistics
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <span className="text-slate-400 font-medium block">Origin</span>
+                    <strong className="text-slate-900 font-bold">{drawerShipment.origin}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-medium block">Destination</span>
+                    <strong className="text-slate-900 font-bold">{drawerShipment.destination}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-medium block">Delivery Status</span>
+                    <span className={`inline-block mt-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${STATUS_STYLES[drawerShipment.status]}`}>
+                      {STATUS_LABELS[drawerShipment.status]}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-medium block">Driver Contact</span>
+                    <strong className="text-slate-800 font-semibold block">{drawerShipment.driver_name || "—"}</strong>
+                    <span className="font-mono text-slate-600">{drawerShipment.driver_phone || "—"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD 3: Parties Card */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+                <div className="flex items-center gap-2 text-brand-900 font-extrabold text-xs uppercase tracking-wider pb-2 border-b border-slate-100">
+                  <UserCheck size={16} className="text-brand-600" /> Consignor &amp; Consignee Parties
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <span className="text-slate-400 font-medium block">Consignor (Sender)</span>
+                    <strong className="text-slate-900 font-bold">{drawerShipment.consignor}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-medium block">Consignee (Receiver)</span>
+                    <strong className="text-slate-900 font-bold">{drawerShipment.consignee}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD 4: Compliance Card (E-Way Expiry Alert) */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <div className="flex items-center gap-2 text-brand-900 font-extrabold text-xs uppercase tracking-wider">
+                    <ShieldAlert size={16} className="text-amber-500" /> Compliance &amp; E-Way Bill
+                  </div>
+                  {(() => {
+                    const info = getEwayExpiryInfo(drawerShipment.eway_bill_expiry_date);
+                    return (
+                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase ${info.badgeClass}`}>
+                        {info.text}
+                      </span>
+                    );
+                  })()}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <span className="text-slate-400 font-medium block">E-Way Bill Number</span>
+                    <strong className="font-mono text-slate-900 font-bold">{drawerShipment.eway_bill_number || "—"}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-medium block">E-Way Bill Date</span>
+                    <strong className="text-slate-800 font-semibold">{fmtDateOnly(drawerShipment.eway_bill_date)}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-medium block">Expiry Date &amp; Time</span>
+                    <strong className="text-slate-900 font-bold">{fmtDate(drawerShipment.eway_bill_expiry_date)}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-medium block">Extended Date</span>
+                    <strong className="text-slate-800 font-semibold">{fmtDateOnly(drawerShipment.new_extended_eway_bill_date)}</strong>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      try {
+                        setNotifyingEway(true);
+                        await notifyEwayExpiry();
+                        flash("E-Way Bill Expiry alert dispatched via Telegram!");
+                      } catch {
+                        alert("Failed to send Telegram alert");
+                      } finally {
+                        setNotifyingEway(false);
+                      }
+                    }}
+                    disabled={notifyingEway}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-xs font-bold text-white shadow hover:bg-amber-600 transition disabled:opacity-50"
+                  >
+                    <BellRing size={15} /> {notifyingEway ? "Sending Alert..." : "Send Telegram Alert"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveShipment(drawerShipment);
+                      setUploadedLrUrl(drawerShipment.lr_copy_url);
+                      setDrawerShipment(null);
+                      setModal("edit_shipment");
+                    }}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
+                  >
+                    Edit Details
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-200 bg-white flex justify-between items-center">
+              <button
+                onClick={() => {
+                  setActiveShipment(drawerShipment);
+                  setDrawerShipment(null);
+                  setModal("event");
+                }}
+                className="flex items-center gap-1.5 rounded-xl border border-brand-300 bg-brand-50 px-4 py-2 text-xs font-bold text-brand-700 hover:bg-brand-100 transition"
+              >
+                <Plus size={15} /> Add Milestone Event
+              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => {
+                    const id = drawerShipment.id;
+                    setDrawerShipment(null);
+                    deleteShipment(id);
+                  }}
+                  className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-bold text-rose-600 hover:bg-rose-100 transition"
+                >
+                  <Trash2 size={15} /> Delete Record
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* UPLOAD EXCEL MODAL */}
       {modal === "upload_excel" && (
@@ -853,58 +1194,61 @@ export default function AdminDashboard() {
       {/* TELEGRAM SETTINGS MODAL */}
       {modal === "telegram_settings" && (
         <Modal
-          title="Telegram Bot Alert Settings"
-          subtitle="Configure bot token & chat ID for automated 24h E-way bill expiry alerts"
+          title="Persistent Telegram Bot Integration"
+          subtitle="Configure automatic E-Way Bill 24-hour expiry notifications to Telegram"
           onClose={() => setModal(null)}
         >
           <form onSubmit={saveTgConfig} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                Bot Token *
-              </label>
+              <label className="label">Telegram Bot Token</label>
               <input
+                type="text"
+                placeholder="e.g. 7849102934:AAFx..."
                 value={tgBotToken}
                 onChange={(e) => setTgBotToken(e.target.value)}
-                placeholder="e.g. 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
+                className="input font-mono text-xs"
                 required
-                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 font-mono text-xs text-slate-900"
               />
+              <p className="mt-1 text-[11px] text-slate-500">Provided by Telegram @BotFather when creating your bot.</p>
             </div>
+
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                Chat ID *
-              </label>
+              <label className="label">Telegram Chat ID / Group ID</label>
               <input
+                type="text"
+                placeholder="e.g. -1001928374 or 123456789"
                 value={tgChatId}
                 onChange={(e) => setTgChatId(e.target.value)}
-                placeholder="e.g. -100123456789 or @channelname"
+                className="input font-mono text-xs"
                 required
-                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 font-mono text-xs text-slate-900"
               />
+              <p className="mt-1 text-[11px] text-slate-500">Chat ID for your dispatch channel or group.</p>
             </div>
+
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                Near Expiry Threshold (Hours)
-              </label>
+              <label className="label">Expiry Alert Threshold (Hours)</label>
               <input
                 type="number"
                 value={tgThreshold}
                 onChange={(e) => setTgThreshold(Number(e.target.value))}
+                className="input text-xs"
                 min={1}
                 max={168}
-                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900"
+                required
               />
+              <p className="mt-1 text-[11px] text-slate-500">Alerts trigger when E-Way bill expiry is within this number of hours (default 48h).</p>
             </div>
 
-            <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+            <div className="flex items-center justify-between pt-4 border-t border-slate-100">
               <button
                 type="button"
                 onClick={testTgBot}
                 disabled={tgTesting || !tgBotToken || !tgChatId}
-                className="flex items-center gap-1.5 rounded-xl border border-brand-300 bg-brand-50 px-4 py-2 text-xs font-bold text-brand-800 hover:bg-brand-100 disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-xl border border-blue-300 bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
               >
-                <Send size={14} /> Send Test Message
+                <Send size={14} /> {tgTesting ? "Sending Test..." : "Send Test Message"}
               </button>
+
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -913,8 +1257,8 @@ export default function AdminDashboard() {
                 >
                   Cancel
                 </button>
-                <button className="rounded-xl bg-brand-900 px-5 py-2 text-xs font-bold text-white shadow hover:bg-brand-800">
-                  Save Config
+                <button type="submit" className="btn-primary py-2 text-xs">
+                  Save Settings
                 </button>
               </div>
             </div>
@@ -922,89 +1266,89 @@ export default function AdminDashboard() {
         </Modal>
       )}
 
-      {/* CREATE SHIPMENT MODAL */}
+      {/* NEW SHIPMENT MODAL */}
       {modal === "shipment" && (
-        <Modal title="Create New Consignment" onClose={() => setModal(null)}>
-          <form onSubmit={createShipment} className="grid gap-4 sm:grid-cols-2 text-slate-800">
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Invoice Number</label>
-              <input name="invoice_number" required placeholder="e.g. INV-2026-9901" className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Invoice Date</label>
-              <input name="invoice_date" type="date" className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">E-Way Bill Number</label>
-              <input name="eway_bill_number" required placeholder="e.g. 311099214566" className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">E-Way Bill Date</label>
-              <input name="eway_bill_date" type="date" className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">E-Way Bill Expiry Date</label>
-              <input name="eway_bill_expiry_date" type="datetime-local" className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">E-Way Bill Status</label>
-              <select name="eway_bill_status" className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900 font-semibold">
-                <option value="VEHICLE NUMBER UPDATED">VEHICLE NUMBER UPDATED</option>
-                <option value="NEAR EXPIRY ALERT BEFORE 24 HR">NEAR EXPIRY ALERT BEFORE 24 HR</option>
-                <option value="PENDING EXTENTION">PENDING EXTENTION</option>
-                <option value="EXTENDED">EXTENDED</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">New Extended E-Way Bill Date</label>
-              <input name="new_extended_eway_bill_date" type="date" className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Origin City *</label>
-              <input name="origin" required placeholder="e.g. Hubli, KA" className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Destination City *</label>
-              <input name="destination" required placeholder="e.g. Bengaluru, KA" className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Consignor Name *</label>
-              <input name="consignor" required placeholder="e.g. Asian Paints Hubli Depot" className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Consignee Name *</label>
-              <input name="consignee" required placeholder="e.g. Sri Venkateshwara Traders" className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Driver Name</label>
-              <input name="driver_name" placeholder="e.g. Ramesh Kumar" className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Driver Mobile No</label>
-              <input name="driver_phone" placeholder="e.g. +91 98450 12345" className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Delivery Status</label>
-              <select name="status" className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900 font-semibold">
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3">
-              <label className="flex items-center gap-2 text-xs font-bold text-slate-900">
-                <Paperclip size={14} className="text-brand-600" /> Attach LR Copy Document
-              </label>
-              <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" onChange={handleLrFileUpload} className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:rounded-xl file:border-0 file:bg-brand-900 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white" />
-              {uploadedLrUrl && (
-                <p className="mt-1 text-xs font-bold text-emerald-600">✓ LR Attached: {uploadedLrUrl}</p>
-              )}
+        <Modal title="Create New Consignment Entry" subtitle="Enter tracking and compliance details" onClose={() => setModal(null)}>
+          <form onSubmit={createShipment} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label">Invoice Number</label>
+                <input name="invoice_number" placeholder="e.g. INV-2026-904" className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">Invoice Date</label>
+                <input name="invoice_date" type="date" className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">E-Way Bill Number</label>
+                <input name="eway_bill_number" placeholder="e.g. 311099281746" className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">E-Way Bill Date</label>
+                <input name="eway_bill_date" type="date" className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">E-Way Bill Expiry Date &amp; Time</label>
+                <input name="eway_bill_expiry_date" type="datetime-local" className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">E-Way Bill Status</label>
+                <input name="eway_bill_status" defaultValue="VEHICLE NUMBER UPDATED" className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">New Extended E-Way Date</label>
+                <input name="new_extended_eway_bill_date" type="date" className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">Delivery Status</label>
+                <select name="status" className="input text-xs capitalize">
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {STATUS_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Origin City / Depot *</label>
+                <input name="origin" required defaultValue="Hubli, KA" className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">Destination City *</label>
+                <input name="destination" required defaultValue="Bengaluru, KA" className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">Consignor (Sender) *</label>
+                <input name="consignor" required defaultValue="Asian Paints Depot Hubli" className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">Consignee (Receiver) *</label>
+                <input name="consignee" required defaultValue="Sri Venkateshwara Traders" className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">Driver Name</label>
+                <input name="driver_name" placeholder="Driver Full Name" className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">Driver Phone / Mobile</label>
+                <input name="driver_phone" placeholder="+91 98450 XXXXX" className="input text-xs" />
+              </div>
             </div>
 
-            <div className="sm:col-span-2 flex justify-end gap-3 pt-3 border-t border-slate-100">
-              <button type="button" onClick={() => setModal(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
-              <button className="rounded-xl bg-brand-900 px-5 py-2 text-xs font-bold text-white shadow hover:bg-brand-800">Create Shipment</button>
+            <div>
+              <label className="label">Upload Attached LR Copy Document (PDF, JPG, PNG)</label>
+              <input type="file" onChange={handleLrFileUpload} className="block w-full text-xs text-slate-500" />
+              {uploadingLr && <p className="text-xs text-brand-600 mt-1">Uploading document...</p>}
+              {uploadedLrUrl && <p className="text-xs text-emerald-600 mt-1 font-bold">✓ File attached: {uploadedLrUrl}</p>}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <button type="button" onClick={() => setModal(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold">
+                Cancel
+              </button>
+              <button type="submit" className="btn-primary py-2 text-xs">
+                Create Consignment Entry
+              </button>
             </div>
           </form>
         </Modal>
@@ -1012,100 +1356,103 @@ export default function AdminDashboard() {
 
       {/* EDIT SHIPMENT MODAL */}
       {modal === "edit_shipment" && activeShipment && (
-        <Modal title={`Edit Shipment · ${activeShipment.tracking_number}`} onClose={() => setModal(null)}>
-          <form onSubmit={updateShipment} className="grid gap-4 sm:grid-cols-2 text-slate-800">
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Invoice Number</label>
-              <input name="invoice_number" defaultValue={activeShipment.invoice_number || ""} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Invoice Date</label>
-              <input name="invoice_date" type="date" defaultValue={activeShipment.invoice_date ? new Date(activeShipment.invoice_date).toISOString().slice(0,10) : ""} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">E-Way Bill Number</label>
-              <input name="eway_bill_number" defaultValue={activeShipment.eway_bill_number || ""} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">E-Way Bill Date</label>
-              <input name="eway_bill_date" type="date" defaultValue={activeShipment.eway_bill_date ? new Date(activeShipment.eway_bill_date).toISOString().slice(0,10) : ""} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">E-Way Bill Expiry Date</label>
-              <input name="eway_bill_expiry_date" type="datetime-local" defaultValue={activeShipment.eway_bill_expiry_date ? new Date(activeShipment.eway_bill_expiry_date).toISOString().slice(0,16) : ""} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">E-Way Bill Status</label>
-              <select name="eway_bill_status" defaultValue={activeShipment.eway_bill_status || "VEHICLE NUMBER UPDATED"} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900 font-semibold">
-                <option value="VEHICLE NUMBER UPDATED">VEHICLE NUMBER UPDATED</option>
-                <option value="NEAR EXPIRY ALERT BEFORE 24 HR">NEAR EXPIRY ALERT BEFORE 24 HR</option>
-                <option value="PENDING EXTENTION">PENDING EXTENTION</option>
-                <option value="EXTENDED">EXTENDED</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">New Extended E-Way Bill Date</label>
-              <input name="new_extended_eway_bill_date" type="date" defaultValue={activeShipment.new_extended_eway_bill_date ? new Date(activeShipment.new_extended_eway_bill_date).toISOString().slice(0,10) : ""} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Origin City</label>
-              <input name="origin" defaultValue={activeShipment.origin} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Destination City</label>
-              <input name="destination" defaultValue={activeShipment.destination} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Consignor Name</label>
-              <input name="consignor" defaultValue={activeShipment.consignor} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Consignee Name</label>
-              <input name="consignee" defaultValue={activeShipment.consignee} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Driver Name</label>
-              <input name="driver_name" defaultValue={activeShipment.driver_name || ""} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Driver Mobile No</label>
-              <input name="driver_phone" defaultValue={activeShipment.driver_phone || ""} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Delivery Status</label>
-              <select name="status" defaultValue={activeShipment.status} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900 font-semibold">
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-                ))}
-              </select>
+        <Modal title="Edit Consignment Details" subtitle={`Updating LR: ${activeShipment.tracking_number}`} onClose={() => setModal(null)}>
+          <form onSubmit={updateShipment} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label">Invoice Number</label>
+                <input name="invoice_number" defaultValue={activeShipment.invoice_number || ""} className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">Invoice Date</label>
+                <input name="invoice_date" type="date" defaultValue={activeShipment.invoice_date ? activeShipment.invoice_date.slice(0, 10) : ""} className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">E-Way Bill Number</label>
+                <input name="eway_bill_number" defaultValue={activeShipment.eway_bill_number || ""} className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">E-Way Bill Date</label>
+                <input name="eway_bill_date" type="date" defaultValue={activeShipment.eway_bill_date ? activeShipment.eway_bill_date.slice(0, 10) : ""} className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">E-Way Bill Expiry Date &amp; Time</label>
+                <input name="eway_bill_expiry_date" type="datetime-local" defaultValue={activeShipment.eway_bill_expiry_date ? activeShipment.eway_bill_expiry_date.slice(0, 16) : ""} className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">E-Way Bill Status</label>
+                <input name="eway_bill_status" defaultValue={activeShipment.eway_bill_status || "VEHICLE NUMBER UPDATED"} className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">New Extended E-Way Date</label>
+                <input name="new_extended_eway_bill_date" type="date" defaultValue={activeShipment.new_extended_eway_bill_date ? activeShipment.new_extended_eway_bill_date.slice(0, 10) : ""} className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">Delivery Status</label>
+                <select name="status" defaultValue={activeShipment.status} className="input text-xs capitalize">
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {STATUS_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Origin City</label>
+                <input name="origin" defaultValue={activeShipment.origin} required className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">Destination City</label>
+                <input name="destination" defaultValue={activeShipment.destination} required className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">Consignor</label>
+                <input name="consignor" defaultValue={activeShipment.consignor} required className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">Consignee</label>
+                <input name="consignee" defaultValue={activeShipment.consignee} required className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">Driver Name</label>
+                <input name="driver_name" defaultValue={activeShipment.driver_name || ""} className="input text-xs" />
+              </div>
+              <div>
+                <label className="label">Driver Phone</label>
+                <input name="driver_phone" defaultValue={activeShipment.driver_phone || ""} className="input text-xs" />
+              </div>
             </div>
 
-            <div className="sm:col-span-2 flex justify-end gap-3 pt-3 border-t border-slate-100">
-              <button type="button" onClick={() => setModal(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
-              <button className="rounded-xl bg-brand-900 px-5 py-2 text-xs font-bold text-white shadow hover:bg-brand-800">Save Changes</button>
+            <div>
+              <label className="label">Update LR Copy File</label>
+              <input type="file" onChange={handleLrFileUpload} className="block w-full text-xs text-slate-500" />
+              {uploadingLr && <p className="text-xs text-brand-600 mt-1">Uploading...</p>}
+              {(uploadedLrUrl || activeShipment.lr_copy_url) && (
+                <p className="text-xs text-emerald-600 mt-1 font-bold">
+                  ✓ Attached LR: {uploadedLrUrl || activeShipment.lr_copy_url}
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <button type="button" onClick={() => setModal(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold">
+                Cancel
+              </button>
+              <button type="submit" className="btn-primary py-2 text-xs">
+                Save Changes
+              </button>
             </div>
           </form>
         </Modal>
       )}
 
-      {/* EVENT MODAL */}
+      {/* TRACKING EVENT MODAL */}
       {modal === "event" && activeShipment && (
-        <Modal
-          title={`Add Tracking Update · ${activeShipment.tracking_number}`}
-          subtitle={`Route: ${activeShipment.origin} ➔ ${activeShipment.destination}`}
-          onClose={() => setModal(null)}
-        >
-          <form onSubmit={addEvent} className="space-y-4 text-slate-800">
+        <Modal title="Add Tracking Milestone Event" subtitle={`Shipment: ${activeShipment.tracking_number}`} onClose={() => setModal(null)}>
+          <form onSubmit={addEvent} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-                New Status *
-              </label>
-              <select
-                name="status"
-                required
-                defaultValue={activeShipment.status}
-                className="mt-1.5 w-full rounded-xl border border-slate-300 bg-slate-50 p-3 text-xs text-slate-900"
-              >
+              <label className="label">New Milestone Status</label>
+              <select name="status" defaultValue={activeShipment.status} className="input text-xs capitalize">
                 {STATUSES.map((s) => (
                   <option key={s} value={s}>
                     {STATUS_LABELS[s]}
@@ -1114,88 +1461,50 @@ export default function AdminDashboard() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-                Current Location *
-              </label>
-              <input
-                name="location"
-                required
-                placeholder="e.g. Pune Highway Checkpoint, MH"
-                className="mt-1.5 w-full rounded-xl border border-slate-300 bg-slate-50 p-3 text-xs text-slate-900"
-              />
+              <label className="label">Current Location (City / Toll / Depot)</label>
+              <input name="location" defaultValue={activeShipment.origin} required className="input text-xs" />
             </div>
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-                Update Note / Remarks
-              </label>
-              <textarea
-                name="note"
-                rows={3}
-                placeholder="e.g. Transhipment departed hub, expected delivery on schedule."
-                className="mt-1.5 w-full rounded-xl border border-slate-300 bg-slate-50 p-3 text-xs text-slate-900"
-              />
+              <label className="label">Milestone Note</label>
+              <textarea name="note" placeholder="e.g. Departed Hubli hub, driver en route to Pune" className="input text-xs" rows={3} required />
             </div>
-            <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setModal(null)}
-                className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-              >
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <button type="button" onClick={() => setModal(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold">
                 Cancel
               </button>
-              <button className="rounded-xl bg-brand-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg hover:bg-brand-700 transition">
-                Post Tracking Update
+              <button type="submit" className="btn-primary py-2 text-xs">
+                Add Milestone
               </button>
             </div>
           </form>
         </Modal>
       )}
 
-      {/* ARTICLE MODAL */}
+      {/* NEW ARTICLE MODAL */}
       {modal === "post" && (
-        <Modal title="Publish Blog Article" onClose={() => setModal(null)}>
-          <form onSubmit={createPost} className="space-y-4 text-slate-800">
+        <Modal title="Publish New Article" subtitle="Add news update to website" onClose={() => setModal(null)}>
+          <form onSubmit={createPost} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-                Title *
-              </label>
-              <input
-                name="title"
-                required
-                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900"
-              />
+              <label className="label">Article Title</label>
+              <input name="title" required className="input text-xs" />
             </div>
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-                Excerpt *
-              </label>
-              <textarea
-                name="excerpt"
-                required
-                rows={2}
-                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900"
-              />
+              <label className="label">Short Summary Excerpt</label>
+              <textarea name="excerpt" required className="input text-xs" rows={2} />
             </div>
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-                Content (Markdown) *
-              </label>
-              <textarea
-                name="content"
-                required
-                rows={8}
-                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 font-mono text-xs text-slate-900"
-              />
+              <label className="label">Full Markdown Content</label>
+              <textarea name="content" required className="input text-xs font-mono" rows={6} />
             </div>
-            <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setModal(null)}
-                className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-              >
+            <div>
+              <label className="label">Tags (comma separated)</label>
+              <input name="tags" placeholder="logistics, warehousing, hubli" className="input text-xs" />
+            </div>
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <button type="button" onClick={() => setModal(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold">
                 Cancel
               </button>
-              <button className="rounded-xl bg-brand-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg">
+              <button type="submit" className="btn-primary py-2 text-xs">
                 Publish Article
               </button>
             </div>
@@ -1203,94 +1512,63 @@ export default function AdminDashboard() {
         </Modal>
       )}
 
-      {/* USER MODAL */}
+      {/* NEW USER MODAL */}
       {modal === "user" && (
-        <Modal title="Create User Account" onClose={() => setModal(null)}>
-          <form onSubmit={createUser} className="grid gap-4 sm:grid-cols-2 text-slate-800">
+        <Modal title="Create User Account" subtitle="Assign staff or client credentials" onClose={() => setModal(null)}>
+          <form onSubmit={createUser} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-                Full Name *
-              </label>
-              <input
-                name="full_name"
-                required
-                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900"
-              />
+              <label className="label">Full Name</label>
+              <input name="full_name" required className="input text-xs" />
             </div>
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-                Company
-              </label>
-              <input
-                name="company"
-                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900"
-              />
+              <label className="label">Email Address (Login Username)</label>
+              <input name="email" type="email" required className="input text-xs" />
             </div>
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-                Email *
-              </label>
-              <input
-                name="email"
-                type="email"
-                required
-                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900"
-              />
+              <label className="label">Organization / Client Company</label>
+              <input name="company" placeholder="Kalebudde Logistics / Asian Paints" className="input text-xs" />
             </div>
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-                Password *
-              </label>
-              <input
-                name="password"
-                type="password"
-                required
-                minLength={8}
-                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900"
-              />
+              <label className="label">Password</label>
+              <input name="password" type="password" required className="input text-xs" minLength={6} />
             </div>
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-                Role *
-              </label>
-              <select
-                name="role"
-                defaultValue="client"
-                className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-900"
-              >
-                <option value="client">Client — read-only access to own shipments</option>
-                <option value="staff">Staff — manage shipments, blog, quotes</option>
-                <option value="admin">Admin — full system control</option>
+            <div>
+              <label className="label">Access Role</label>
+              <select name="role" className="input text-xs capitalize">
+                <option value="staff">Staff (View / Edit / Upload / Export - No Delete)</option>
+                <option value="admin">Administrator (Full Access + Deletion Rights)</option>
+                <option value="client">Client Account (Read Own Consignments)</option>
               </select>
             </div>
-            <div className="sm:col-span-2 flex justify-end gap-3 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setModal(null)}
-                className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-              >
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <button type="button" onClick={() => setModal(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold">
                 Cancel
               </button>
-              <button className="rounded-xl bg-brand-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg">
-                Create User
+              <button type="submit" className="btn-primary py-2 text-xs">
+                Create Account
               </button>
             </div>
           </form>
         </Modal>
       )}
-    </div>
+    </>
   );
 }
 
+// ----------------------------------------------------
+// GLOBAL TRACKING TABLE COMPONENT (CLEAN UNCLUTTERED VIEW)
+// ----------------------------------------------------
 function ShipmentTable({
   shipments,
   userRole,
+  onSelectDrawer,
   onEvent,
   onEdit,
   onDelete,
 }: {
   shipments: Shipment[];
   userRole?: string;
+  onSelectDrawer: (s: Shipment) => void;
   onEvent: (s: Shipment) => void;
   onEdit: (s: Shipment) => void;
   onDelete: (id: number) => void;
@@ -1310,98 +1588,24 @@ function ShipmentTable({
         <table className="w-full text-left text-xs whitespace-nowrap">
           <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-600">
             <tr>
-              <th className="px-4 py-3.5">INVOICE</th>
-              <th className="px-4 py-3.5">INVOICE DATE</th>
-              <th className="px-4 py-3.5">E-WAY BILL NUMBER</th>
-              <th className="px-4 py-3.5">E-WAY BILL DATE</th>
-              <th className="px-4 py-3.5">E-WAY BILL EXPIRY DATE</th>
-              <th className="px-4 py-3.5">E-WAY BILL STATUS</th>
-              <th className="px-4 py-3.5">NEW EXTENDED DATE</th>
-              <th className="px-4 py-3.5">ORIGIN</th>
-              <th className="px-4 py-3.5">DESTINATION</th>
-              <th className="px-4 py-3.5">CONSIGNOR</th>
-              <th className="px-4 py-3.5">CONSIGNEE</th>
-              <th className="px-4 py-3.5">DRIVER NAME</th>
-              <th className="px-4 py-3.5">DRIVER NO</th>
               <th className="px-4 py-3.5">DELIVERY STATUS</th>
+              <th className="px-4 py-3.5">LR NUMBER</th>
+              <th className="px-4 py-3.5">ORIGIN ➔ DESTINATION</th>
+              <th className="px-4 py-3.5">CONSIGNOR / CONSIGNEE</th>
+              <th className="px-4 py-3.5">E-WAY BILL</th>
+              <th className="px-4 py-3.5">E-WAY EXPIRY ALERT</th>
               <th className="px-4 py-3.5 text-right">ACTIONS</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-slate-800">
             {shipments.map((s) => {
-              const ewayStyle =
-                EWAY_STATUS_STYLES[s.eway_bill_status || "VEHICLE NUMBER UPDATED"] ||
-                "bg-slate-100 text-slate-700 border-slate-200";
+              const ewayInfo = getEwayExpiryInfo(s.eway_bill_expiry_date);
 
               return (
-                <tr key={s.id} className="hover:bg-slate-50/80 transition">
-                  {/* INVOICE */}
-                  <td className="px-4 py-3.5 font-mono font-bold text-brand-900">
-                    {s.invoice_number || "—"}
-                  </td>
-
-                  {/* INVOICE DATE */}
-                  <td className="px-4 py-3.5 text-slate-600">
-                    {fmtDateOnly(s.invoice_date)}
-                  </td>
-
-                  {/* E-WAY BILL NUMBER */}
-                  <td className="px-4 py-3.5 font-mono font-bold text-slate-800">
-                    {s.eway_bill_number || "—"}
-                  </td>
-
-                  {/* E-WAY BILL DATE */}
-                  <td className="px-4 py-3.5 text-slate-600">
-                    {fmtDateOnly(s.eway_bill_date)}
-                  </td>
-
-                  {/* E-WAY BILL EXPIRY DATE */}
-                  <td className="px-4 py-3.5 font-medium text-slate-700">
-                    {fmtDate(s.eway_bill_expiry_date)}
-                  </td>
-
-                  {/* E-WAY BILL STATUS */}
-                  <td className="px-4 py-3.5">
-                    <span className={`inline-block rounded-full border px-2.5 py-0.5 text-[10px] uppercase tracking-wider ${ewayStyle}`}>
-                      {s.eway_bill_status || "VEHICLE NUMBER UPDATED"}
-                    </span>
-                  </td>
-
-                  {/* NEW EXTENDED DATE */}
-                  <td className="px-4 py-3.5 text-slate-600 font-medium">
-                    {fmtDateOnly(s.new_extended_eway_bill_date)}
-                  </td>
-
-                  {/* ORIGIN */}
-                  <td className="px-4 py-3.5 font-semibold text-slate-700">
-                    {s.origin}
-                  </td>
-
-                  {/* DESTINATION */}
-                  <td className="px-4 py-3.5 font-semibold text-slate-700">
-                    {s.destination}
-                  </td>
-
-                  {/* CONSIGNOR */}
-                  <td className="px-4 py-3.5 text-slate-700 font-medium">
-                    {s.consignor}
-                  </td>
-
-                  {/* CONSIGNEE */}
-                  <td className="px-4 py-3.5 text-slate-700 font-bold">
-                    {s.consignee}
-                  </td>
-
-                  {/* DRIVER NAME */}
-                  <td className="px-4 py-3.5 text-slate-600 font-medium">
-                    {s.driver_name || "—"}
-                  </td>
-
-                  {/* DRIVER NO */}
-                  <td className="px-4 py-3.5 text-slate-600 font-mono">
-                    {s.driver_phone || "—"}
-                  </td>
-
+                <tr
+                  key={s.id}
+                  className={`transition ${ewayInfo.rowClass || "hover:bg-slate-50/80"}`}
+                >
                   {/* DELIVERY STATUS */}
                   <td className="px-4 py-3.5">
                     <span className={`inline-block rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_STYLES[s.status]}`}>
@@ -1409,20 +1613,76 @@ function ShipmentTable({
                     </span>
                   </td>
 
+                  {/* LR NUMBER (CLICK TO OPEN DRAWER) */}
+                  <td className="px-4 py-3.5">
+                    <button
+                      onClick={() => onSelectDrawer(s)}
+                      className="font-mono font-extrabold text-brand-900 hover:text-accent-500 flex items-center gap-1.5 group transition"
+                      title="Click to slide out complete details"
+                    >
+                      <Package size={14} className="text-brand-600 group-hover:scale-110 transition" />
+                      <span>{s.tracking_number}</span>
+                      <ChevronRight size={13} className="text-slate-400 group-hover:translate-x-0.5 transition" />
+                    </button>
+                    {s.invoice_number && (
+                      <span className="text-[10px] text-slate-400 font-mono block">Inv: {s.invoice_number}</span>
+                    )}
+                  </td>
+
+                  {/* ORIGIN ➔ DESTINATION */}
+                  <td className="px-4 py-3.5">
+                    <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                      <span>{s.origin}</span>
+                      <span className="text-brand-500">➔</span>
+                      <span>{s.destination}</span>
+                    </div>
+                  </td>
+
+                  {/* CONSIGNOR / CONSIGNEE */}
+                  <td className="px-4 py-3.5">
+                    <div className="max-w-[200px] truncate">
+                      <span className="font-semibold text-slate-900 block truncate">{s.consignor}</span>
+                      <span className="text-slate-500 text-[11px] block truncate">To: {s.consignee}</span>
+                    </div>
+                  </td>
+
+                  {/* E-WAY BILL */}
+                  <td className="px-4 py-3.5 font-mono font-bold text-slate-700">
+                    {s.eway_bill_number || "—"}
+                  </td>
+
+                  {/* E-WAY EXPIRY ALERT BADGE */}
+                  <td className="px-4 py-3.5">
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] ${ewayInfo.badgeClass}`}>
+                      {ewayInfo.level === "expired" && <ShieldAlert size={12} />}
+                      {ewayInfo.level === "expiring_24h" && <AlertTriangle size={12} />}
+                      <span>{ewayInfo.text}</span>
+                    </span>
+                  </td>
+
                   {/* ACTIONS */}
                   <td className="px-4 py-3.5 text-right">
                     <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => onSelectDrawer(s)}
+                        className="rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-[11px] font-bold text-brand-700 hover:bg-brand-100 transition"
+                        title="View Full Details Drawer"
+                      >
+                        Details
+                      </button>
+
                       {s.lr_copy_url && (
                         <a
                           href={s.lr_copy_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="rounded-lg border border-brand-200 bg-brand-50 p-1.5 text-brand-700 hover:bg-brand-100 transition"
+                          className="rounded-lg border border-slate-200 bg-slate-50 p-1.5 text-slate-700 hover:bg-slate-100 transition"
                           title="View Attached LR Copy"
                         >
                           <Paperclip size={14} />
                         </a>
                       )}
+
                       <button
                         onClick={() => onEvent(s)}
                         className="rounded-lg border border-slate-200 bg-slate-50 p-1.5 text-slate-700 hover:bg-slate-100 transition"
@@ -1450,8 +1710,8 @@ function ShipmentTable({
                       ) : (
                         <button
                           disabled
-                          className="rounded-lg border border-slate-200 bg-slate-100 p-1.5 text-slate-400 cursor-not-allowed opacity-50"
-                          title="Only Administrator can delete entries"
+                          className="rounded-lg border border-slate-200 bg-slate-100 p-1.5 text-slate-300 cursor-not-allowed opacity-50"
+                          title="Deletion restricted to Admin role"
                         >
                           <Lock size={14} />
                         </button>
