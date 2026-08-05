@@ -16,7 +16,7 @@ export default function About() {
         title="About Kalebudde Logistics | Founded by Farooque Kalebudde"
         description="Kalebudde Logistics, established 2014 and built on Kalebudde Warehousing (1999), is led by founder Farooque Kalebudde. Learn about our mission, values and heritage."
         path="/about"
-        image="/images/founder.jpg"
+        image="/images/founder.png"
         jsonLd={{
           "@context": "https://schema.org",
           "@type": "AboutPage",
@@ -29,18 +29,23 @@ export default function About() {
         }}
       />
 
-      <section className="bg-brand-900 py-16">
-        <div className="container-x">
-          <p className="eyebrow">Who we are</p>
-          <h1 className="mt-2 max-w-3xl font-display text-4xl font-extrabold leading-tight text-white sm:text-5xl">
-            A legacy of efficient logistics solutions
-          </h1>
+      {/* Hero Header */}
+      <section className="bg-brand-950 py-16 text-white">
+        <div className="container-x max-w-4xl text-center">
+          <p className="eyebrow text-accent-400">About Kalebudde Logistics</p>
+          <h1 className="h1 mt-3 text-white">Driven by heritage. Powered by precision.</h1>
+          <p className="mt-6 text-lg text-brand-100">
+            For over two decades, the Kalebudde family has moved Indian commerce.
+            What began as a single warehouse in Hubli has grown into a pan-India freight
+            forwarding network trusted by global brands and regional leaders alike.
+          </p>
         </div>
       </section>
 
+      {/* Journey & Mission */}
       <section className="container-x grid items-center gap-12 py-20 lg:grid-cols-2">
         <div>
-          <p className="eyebrow">About Kalebudde Logistics</p>
+          <p className="eyebrow">Our journey</p>
           <h2 className="h2 mt-2">Over two decades of moving Indian business forward</h2>
           <div className="mt-6 space-y-4 leading-relaxed text-slate-600">
             <p>
@@ -55,7 +60,7 @@ export default function About() {
             </p>
           </div>
 
-          <div className="mt-8 rounded-2xl border-l-4 border-accent-500 bg-slate-50 p-6">
+          <div className="mt-8 rounded-2xl border-l-4 border-accent-500 bg-slate-50 p-6 shadow-sm">
             <div className="flex items-center gap-2 text-accent-500">
               <Target size={18} />
               <h3 className="font-display font-bold uppercase tracking-wide">Our mission</h3>
@@ -68,7 +73,7 @@ export default function About() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl shadow-xl">
+        <div className="overflow-hidden rounded-2xl shadow-xl bg-slate-100">
           <img
             src="/images/fleet.png"
             alt="Fleet of Kalebudde Logistics trucks at the company depot"
@@ -80,23 +85,34 @@ export default function About() {
         </div>
       </section>
 
-      {/* Founder */}
-      <section className="bg-slate-50 py-20">
-        <div className="container-x grid items-start gap-12 lg:grid-cols-[380px,1fr]">
-          <figure>
-            <img
-              src="/images/founder.jpg"
-              alt="Farooque Kalebudde, Founder of Kalebudde Logistics"
-              className="w-full rounded-2xl object-cover shadow-xl"
-              loading="lazy"
-              width={800}
-              height={1000}
-            />
-            <figcaption className="mt-4 text-center">
-              <p className="font-display text-xl font-bold text-brand-900">
+      {/* Founder Section */}
+      <section className="bg-slate-50 py-20 border-y border-slate-200">
+        <div className="container-x grid items-center gap-12 lg:grid-cols-[380px,1fr]">
+          <figure className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-brand-900 via-brand-950 to-slate-900 p-6 shadow-2xl ring-1 ring-brand-700/40">
+            <div className="relative mx-auto flex items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-b from-slate-800/80 to-brand-950/90 p-3 shadow-inner">
+              <img
+                src="/images/founder.png"
+                alt="Farooque Kalebudde, Founder of Kalebudde Logistics"
+                className="h-auto max-h-[440px] w-full object-contain drop-shadow-2xl transition duration-300 hover:scale-[1.02]"
+                loading="lazy"
+                width={800}
+                height={1000}
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  if (!target.dataset.tried) {
+                    target.dataset.tried = "true";
+                    target.src = "/images/founder.jpg";
+                  }
+                }}
+              />
+            </div>
+            <figcaption className="mt-5 text-center">
+              <p className="font-display text-xl font-extrabold text-white tracking-tight">
                 Farooque Kalebudde
               </p>
-              <p className="text-sm text-accent-500">Founder &amp; Managing Director</p>
+              <p className="mt-1 text-xs font-bold uppercase tracking-widest text-accent-400">
+                Founder &amp; Managing Director
+              </p>
             </figcaption>
           </figure>
 
@@ -133,25 +149,20 @@ export default function About() {
               </p>
             </div>
 
-            <blockquote className="mt-8 rounded-2xl bg-brand-900 p-7 text-brand-100">
+            <blockquote className="mt-8 rounded-2xl bg-brand-900 p-7 text-brand-100 shadow-lg">
               <p className="font-display text-lg italic leading-relaxed text-white">
                 "Logistics is a promise business. The truck is just how we keep the
                 promise."
               </p>
-              <footer className="mt-3 text-sm text-accent-400">
-                — Farooque Kalebudde, Founder
+              <footer className="mt-3 text-sm text-accent-400 font-bold">
+                — Farooque Kalebudde, Founder &amp; MD
               </footer>
             </blockquote>
-
-            <p className="mt-6 text-xs italic text-slate-400">
-              Biography prepared for this website; please share any corrections or
-              additional milestones and we will update this section.
-            </p>
           </div>
         </div>
       </section>
 
-      {/* Experience + values */}
+      {/* Experience + Values */}
       <section className="container-x grid gap-8 py-20 md:grid-cols-2">
         <div className="card">
           <span className="mb-5 grid h-12 w-12 place-items-center rounded-xl bg-brand-50 text-brand-700">
