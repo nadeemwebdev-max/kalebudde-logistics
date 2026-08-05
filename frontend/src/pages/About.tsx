@@ -30,7 +30,7 @@ export default function About() {
       />
 
       {/* Hero Header */}
-      <section className="bg-brand-950 py-16 text-white">
+      <section className="bg-brand-900 py-16 text-white">
         <div className="container-x max-w-4xl text-center">
           <p className="eyebrow text-accent-400">About Kalebudde Logistics</p>
           <h1 className="h1 mt-3 text-white">Driven by heritage. Powered by precision.</h1>
