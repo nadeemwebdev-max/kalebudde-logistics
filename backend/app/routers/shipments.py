@@ -122,6 +122,165 @@ def list_shipments(
     return query.order_by(Shipment.created_at.desc()).offset(offset).limit(limit).all()
 
 
+# ---------- EXCEL & CSV DATA EXPORT & SAMPLE TEMPLATE ----------
+HEADERS = [
+    "INVOICE",
+    "INVOICE DATE",
+    "E-WAY BILL NUMBER",
+    "E-WAY BILL DATE",
+    "E-WAY BILL EXPIRY DATE",
+    "E-WAY BILL STATUS",
+    "NEW EXTENDED E-WAY BILL DATE",
+    "ORIGIN",
+    "DESTINATION",
+    "CONSIGNOR",
+    "CONSIGNEE",
+    "DRIVER NAME",
+    "DRIVER NO",
+    "DELIVERY STATUS",
+    "TRACKING NUMBER",
+]
+
+
+@router.get("/shipments/export-csv")
+def export_csv_shipments(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    query = db.query(Shipment)
+    if user.role == Role.CLIENT:
+        query = query.filter(Shipment.client_id == user.id)
+    shipments = query.order_by(Shipment.created_at.desc()).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(HEADERS)
+
+    for s in shipments:
+        writer.writerow([
+            s.invoice_number or "",
+            s.invoice_date.strftime("%Y-%m-%d") if s.invoice_date else "",
+            s.eway_bill_number or "",
+            s.eway_bill_date.strftime("%Y-%m-%d") if s.eway_bill_date else "",
+            s.eway_bill_expiry_date.strftime("%Y-%m-%d %H:%M") if s.eway_bill_expiry_date else "",
+            s.eway_bill_status or "VEHICLE NUMBER UPDATED",
+            s.new_extended_eway_bill_date.strftime("%Y-%m-%d") if s.new_extended_eway_bill_date else "",
+            s.origin or "",
+            s.destination or "",
+            s.consignor or "",
+            s.consignee or "",
+            s.driver_name or "",
+            s.driver_phone or "",
+            s.status.value.replace("_", " ").upper(),
+            s.tracking_number,
+        ])
+
+    output.seek(0)
+    filename = f"kalebudde_shipments_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode("utf-8")),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/shipments/export-excel")
+def export_excel_shipments(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    query = db.query(Shipment)
+    if user.role == Role.CLIENT:
+        query = query.filter(Shipment.client_id == user.id)
+    shipments = query.order_by(Shipment.created_at.desc()).all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Shipments"
+    ws.append(HEADERS)
+
+    for s in shipments:
+        ws.append([
+            s.invoice_number or "",
+            s.invoice_date.strftime("%Y-%m-%d") if s.invoice_date else "",
+            s.eway_bill_number or "",
+            s.eway_bill_date.strftime("%Y-%m-%d") if s.eway_bill_date else "",
+            s.eway_bill_expiry_date.strftime("%Y-%m-%d %H:%M") if s.eway_bill_expiry_date else "",
+            s.eway_bill_status or "VEHICLE NUMBER UPDATED",
+            s.new_extended_eway_bill_date.strftime("%Y-%m-%d") if s.new_extended_eway_bill_date else "",
+            s.origin or "",
+            s.destination or "",
+            s.consignor or "",
+            s.consignee or "",
+            s.driver_name or "",
+            s.driver_phone or "",
+            s.status.value.replace("_", " ").upper(),
+            s.tracking_number,
+        ])
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"kalebudde_shipments_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/shipments/sample-template")
+def download_sample_template():
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sample Import Template"
+    ws.append(HEADERS[:14])  # 14 spreadsheet columns
+
+    # 2 Sample Rows for demonstration
+    ws.append([
+        "INV-2026-8801",
+        "2026-08-01",
+        "311099214566",
+        "2026-08-01",
+        "2026-08-07 18:00",
+        "VEHICLE NUMBER UPDATED",
+        "2026-08-10",
+        "Hubli, KA",
+        "Bengaluru, KA",
+        "Asian Paints Hubli Depot",
+        "Sri Venkateshwara Traders",
+        "Ramesh Kumar",
+        "+91 98450 12345",
+        "IN TRANSIT",
+    ])
+    ws.append([
+        "INV-2026-8802",
+        "2026-08-02",
+        "311099214567",
+        "2026-08-02",
+        "2026-08-08 12:00",
+        "NEAR EXPIRY ALERT BEFORE 24 HR",
+        "",
+        "Dharwad, KA",
+        "Mumbai, MH",
+        "Kalebudde Warehousing",
+        "Navkar Logistics Depot",
+        "Suresh Patil",
+        "+91 94481 67890",
+        "BOOKED",
+    ])
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=kalebudde_sample_import_template.xlsx"},
+    )
+
+
 @router.get("/shipments/{shipment_id}", response_model=ShipmentOut)
 def get_shipment(
     shipment_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)
@@ -289,114 +448,6 @@ def upload_excel_csv_shipments(
 
     db.commit()
     return {"message": f"Successfully imported {created_count} shipments", "imported_count": created_count}
-
-
-# ---------- EXCEL & CSV DATA EXPORT ----------
-HEADERS = [
-    "INVOICE",
-    "INVOICE DATE",
-    "E-WAY BILL NUMBER",
-    "E-WAY BILL DATE",
-    "E-WAY BILL EXPIRY DATE",
-    "E-WAY BILL STATUS",
-    "NEW EXTENDED E-WAY BILL DATE",
-    "ORIGIN",
-    "DESTINATION",
-    "CONSIGNOR",
-    "CONSIGNEE",
-    "DRIVER NAME",
-    "DRIVER NO",
-    "DELIVERY STATUS",
-    "TRACKING NUMBER",
-]
-
-
-@router.get("/shipments/export-csv")
-def export_csv_shipments(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    query = db.query(Shipment)
-    if user.role == Role.CLIENT:
-        query = query.filter(Shipment.client_id == user.id)
-    shipments = query.order_by(Shipment.created_at.desc()).all()
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(HEADERS)
-
-    for s in shipments:
-        writer.writerow([
-            s.invoice_number or "",
-            s.invoice_date.strftime("%Y-%m-%d") if s.invoice_date else "",
-            s.eway_bill_number or "",
-            s.eway_bill_date.strftime("%Y-%m-%d") if s.eway_bill_date else "",
-            s.eway_bill_expiry_date.strftime("%Y-%m-%d %H:%M") if s.eway_bill_expiry_date else "",
-            s.eway_bill_status or "VEHICLE NUMBER UPDATED",
-            s.new_extended_eway_bill_date.strftime("%Y-%m-%d") if s.new_extended_eway_bill_date else "",
-            s.origin or "",
-            s.destination or "",
-            s.consignor or "",
-            s.consignee or "",
-            s.driver_name or "",
-            s.driver_phone or "",
-            s.status.value.replace("_", " ").upper(),
-            s.tracking_number,
-        ])
-
-    output.seek(0)
-    filename = f"kalebudde_shipments_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    return StreamingResponse(
-        io.BytesIO(output.getvalue().encode("utf-8")),
-        media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
-    )
-
-
-@router.get("/shipments/export-excel")
-def export_excel_shipments(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    query = db.query(Shipment)
-    if user.role == Role.CLIENT:
-        query = query.filter(Shipment.client_id == user.id)
-    shipments = query.order_by(Shipment.created_at.desc()).all()
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Shipments"
-    ws.append(HEADERS)
-
-    for s in shipments:
-        ws.append([
-            s.invoice_number or "",
-            s.invoice_date.strftime("%Y-%m-%d") if s.invoice_date else "",
-            s.eway_bill_number or "",
-            s.eway_bill_date.strftime("%Y-%m-%d") if s.eway_bill_date else "",
-            s.eway_bill_expiry_date.strftime("%Y-%m-%d %H:%M") if s.eway_bill_expiry_date else "",
-            s.eway_bill_status or "VEHICLE NUMBER UPDATED",
-            s.new_extended_eway_bill_date.strftime("%Y-%m-%d") if s.new_extended_eway_bill_date else "",
-            s.origin or "",
-            s.destination or "",
-            s.consignor or "",
-            s.consignee or "",
-            s.driver_name or "",
-            s.driver_phone or "",
-            s.status.value.replace("_", " ").upper(),
-            s.tracking_number,
-        ])
-
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-
-    filename = f"kalebudde_shipments_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    return Response(
-        content=output.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
-    )
 
 
 @router.post(

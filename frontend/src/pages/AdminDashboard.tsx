@@ -27,6 +27,7 @@ import {
 import Seo from "../components/Seo";
 import {
   api,
+  downloadSampleExcelTemplate,
   downloadShipmentsCsv,
   downloadShipmentsExcel,
   EWAY_STATUS_STYLES,
@@ -803,6 +804,20 @@ export default function AdminDashboard() {
           onClose={() => setModal(null)}
         >
           <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 text-xs text-emerald-800">
+              <div>
+                <strong className="block text-emerald-950 text-xs">Need a sample format?</strong>
+                <span className="text-emerald-700">Download a ready-to-use Excel template pre-filled with sample consignment columns.</span>
+              </div>
+              <button
+                type="button"
+                onClick={downloadSampleExcelTemplate}
+                className="flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3.5 py-2 text-xs font-bold text-white shadow hover:bg-emerald-800 transition shrink-0 self-start sm:self-auto"
+              >
+                <Download size={14} /> Download Sample Template
+              </button>
+            </div>
+
             <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center">
               <FileSpreadsheet size={44} className="mx-auto text-emerald-600 mb-2" />
               <p className="text-sm font-bold text-slate-800">Choose an Excel (.xlsx / .xls) or CSV file</p>
@@ -814,7 +829,7 @@ export default function AdminDashboard() {
                 accept=".xlsx,.xls,.csv"
                 onChange={handleExcelImport}
                 disabled={uploadingExcel}
-                className="mt-4 block w-full text-xs text-slate-500 file:mx-auto file:mr-4 file:rounded-xl file:border-0 file:bg-emerald-600 file:px-6 file:py-2.5 file:text-xs file:font-bold file:text-white hover:file:bg-emerald-700"
+                className="mt-4 block w-full text-xs text-slate-500 file:mx-auto file:mr-4 file:rounded-xl file:border-0 file:bg-emerald-600 file:px-6 file:py-2.5 file:text-xs file:font-bold file:text-white hover:file:bg-emerald-700 cursor-pointer"
               />
               {uploadingExcel && (
                 <p className="mt-3 text-xs font-bold text-emerald-700 animate-pulse">

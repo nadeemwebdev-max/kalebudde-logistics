@@ -182,6 +182,17 @@ export const downloadShipmentsExcel = async () => {
   link.remove();
 };
 
+export const downloadSampleExcelTemplate = async () => {
+  const res = await api.get("/api/shipments/sample-template", { responseType: "blob" });
+  const url = window.URL.createObjectURL(new Blob([res.data]));
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", "kalebudde_sample_import_template.xlsx");
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+};
+
 export const notifyEwayExpiry = async () => {
   const res = await api.post("/api/admin/notify-eway-expiry");
   return res.data;
