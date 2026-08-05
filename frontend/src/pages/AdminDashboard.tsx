@@ -16,6 +16,7 @@ import {
   Lock,
   Package,
   Paperclip,
+  Pencil,
   Plus,
   Search,
   Send,
