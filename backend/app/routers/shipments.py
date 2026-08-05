@@ -436,11 +436,11 @@ def upload_excel_csv_shipments(
                 status_enum = st
                 break
 
-        tracking_code = lr_num or generate_tracking_number(db)
+        system_tracking_code = generate_tracking_number(db)
 
         shipment = Shipment(
-            tracking_number=tracking_code,
-            lr_number=lr_num or tracking_code,
+            tracking_number=system_tracking_code,
+            lr_number=lr_num or f"LR-{random.randint(100000, 999999)}",
             invoice_number=inv or f"INV-{uuid.uuid4().hex[:6].upper()}",
             invoice_date=inv_date or datetime.now(timezone.utc),
             eway_bill_number=eway or f"EWB{random.randint(100000000000, 999999999999)}",
