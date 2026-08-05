@@ -5,12 +5,6 @@ import Seo from "../components/Seo";
 import { Logo } from "../components/Layout";
 import { useAuth } from "../lib/auth";
 
-const DEMO = [
-  ["Administrator", "admin@kalebuddelogistics.in", "Admin@12345", "Full control: users, shipments, blog, quotes"],
-  ["Operations staff", "staff@kalebuddelogistics.in", "Staff@12345", "Shipments, tracking events, blog, quotes"],
-  ["Client", "client@example.com", "Client@12345", "Read-only view of their own shipments"],
-];
-
 export default function Login() {
   const { login } = useAuth();
   const nav = useNavigate();
@@ -92,30 +86,33 @@ export default function Login() {
           </p>
         </div>
 
-        <div className="rounded-2xl bg-slate-50 p-8">
-          <h2 className="font-display text-lg font-bold text-brand-900">
-            Demo accounts &amp; privileges
-          </h2>
-          <p className="mt-1.5 text-sm text-slate-600">
-            Three role levels are built into the management system.
-          </p>
-          <ul className="mt-6 space-y-4">
-            {DEMO.map(([role, mail, pass, perms]) => (
-              <li key={mail} className="rounded-xl border border-slate-200 bg-white p-4">
-                <p className="font-display font-bold text-brand-900">{role}</p>
-                <p className="mt-1 text-xs text-slate-500">{perms}</p>
-                <button
-                  onClick={() => {
-                    setEmail(mail);
-                    setPassword(pass);
-                  }}
-                  className="mt-3 text-xs font-semibold text-accent-500 underline"
-                >
-                  Use {mail}
-                </button>
-              </li>
-            ))}
-          </ul>
+        <div className="rounded-2xl bg-brand-950 p-8 text-white flex flex-col justify-between shadow-xl border border-brand-900">
+          <div>
+            <div className="flex items-center gap-2 text-accent-400 text-xs font-extrabold uppercase tracking-widest">
+              Kalebudde Logistics Management Portal
+            </div>
+            <h2 className="font-display text-2xl font-extrabold text-white mt-3">
+              Operations &amp; Consignment Control
+            </h2>
+            <p className="mt-3 text-sm text-brand-200 leading-relaxed">
+              Welcome to the official logistics management system of Kalebudde Logistics. Secure portal for operational tracking, consignment dispatches, e-way bill compliance, and management control.
+            </p>
+          </div>
+
+          <div className="mt-8 space-y-4 pt-6 border-t border-brand-900/80 text-xs text-brand-200">
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400"></span>
+              <span>Protected by Enterprise TLS 256-bit Encryption</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400"></span>
+              <span>24/7 Automated E-Way Bill Expiry Compliance Alerts</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400"></span>
+              <span>Role-Based Access Control (Admin, Staff, Client)</span>
+            </div>
+          </div>
         </div>
       </section>
     </>

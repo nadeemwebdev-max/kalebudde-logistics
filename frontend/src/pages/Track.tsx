@@ -25,9 +25,8 @@ export default function Track() {
 
       <section className="container-x py-16">
         <TrackWidget />
-        <p className="mt-10 text-center text-sm text-slate-500">
-          Demo tracking numbers: <strong>KL100000001</strong>, <strong>KL100000002</strong>,{" "}
-          <strong>KL100000003</strong>
+        <p className="mt-10 text-center text-xs text-slate-500 font-medium">
+          Search live by <strong>LR Number</strong>, <strong>Invoice Number</strong>, <strong>E-Way Bill No</strong>, or <strong>Consignment Tracking Code</strong>.
         </p>
       </section>
     </>
