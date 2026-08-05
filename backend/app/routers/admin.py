@@ -160,9 +160,30 @@ def update_telegram_config(
         settings.TELEGRAM_CHAT_ID = payload.chat_id.strip() or None
     if payload.threshold_hours:
         settings.EWAY_EXPIRY_THRESHOLD_HOURS = payload.threshold_hours
+
+    # Save persistently to backend/.env
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
+    env_lines = []
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if not any(line.startswith(k) for k in ["TELEGRAM_BOT_TOKEN=", "TELEGRAM_CHAT_ID=", "EWAY_EXPIRY_THRESHOLD_HOURS="]):
+                    if line.strip():
+                        env_lines.append(line.strip())
+
+    if settings.TELEGRAM_BOT_TOKEN:
+        env_lines.append(f"TELEGRAM_BOT_TOKEN={settings.TELEGRAM_BOT_TOKEN}")
+    if settings.TELEGRAM_CHAT_ID:
+        env_lines.append(f"TELEGRAM_CHAT_ID={settings.TELEGRAM_CHAT_ID}")
+    if settings.EWAY_EXPIRY_THRESHOLD_HOURS:
+        env_lines.append(f"EWAY_EXPIRY_THRESHOLD_HOURS={settings.EWAY_EXPIRY_THRESHOLD_HOURS}")
+
+    with open(env_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(env_lines) + "\n")
+
     return {
         "success": True,
-        "message": "Telegram Bot settings updated successfully",
+        "message": "Telegram Bot settings updated and saved persistently to .env!",
         "bot_token": settings.TELEGRAM_BOT_TOKEN or "",
         "chat_id": settings.TELEGRAM_CHAT_ID or "",
         "threshold_hours": settings.EWAY_EXPIRY_THRESHOLD_HOURS,
