@@ -22,8 +22,14 @@ export const useAuth = () => useContext(Ctx);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
-    const raw = localStorage.getItem("kl_user");
-    return raw ? (JSON.parse(raw) as User) : null;
+    try {
+      const raw = localStorage.getItem("kl_user");
+      if (!raw || raw === "undefined" || raw === "null") return null;
+      return JSON.parse(raw) as User;
+    } catch {
+      localStorage.removeItem("kl_user");
+      return null;
+    }
   });
   const [loading, setLoading] = useState(true);
 
@@ -36,10 +42,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api
       .get<User>("/api/auth/me")
       .then(({ data }) => {
-        setUser(data);
-        localStorage.setItem("kl_user", JSON.stringify(data));
+        if (data && typeof data === "object") {
+          setUser(data);
+          localStorage.setItem("kl_user", JSON.stringify(data));
+        } else {
+          setUser(null);
+          localStorage.removeItem("kl_user");
+        }
       })
-      .catch(() => setUser(null))
+      .catch(() => {
+        setUser(null);
+        localStorage.removeItem("kl_token");
+        localStorage.removeItem("kl_user");
+      })
       .finally(() => setLoading(false));
   }, []);
 
