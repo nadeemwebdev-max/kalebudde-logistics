@@ -9,6 +9,9 @@
   RewriteEngine On
   RewriteBase /
   
+  # Exclude static assets (.js, .css, .png, .jpg, .svg, etc.) from SPA rewrite
+  RewriteRule \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|json)$ - [L]
+
   # Serve existing files and directories directly without rewrite
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d
