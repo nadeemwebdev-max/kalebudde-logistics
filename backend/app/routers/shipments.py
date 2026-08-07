@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
-import openpyxl
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -110,7 +110,21 @@ def list_shipments(
 ):
     query = db.query(Shipment)
     if user.role == Role.CLIENT:
-        query = query.filter(Shipment.client_id == user.id)
+        client_filters = [Shipment.client_id == user.id]
+        if user.full_name and user.full_name.strip():
+            fn = user.full_name.strip()
+            client_filters.append(Shipment.consignor.ilike(f"%{fn}%"))
+            client_filters.append(Shipment.consignee.ilike(f"%{fn}%"))
+        if user.company and user.company.strip():
+            comp = user.company.strip()
+            client_filters.append(Shipment.consignor.ilike(f"%{comp}%"))
+            client_filters.append(Shipment.consignee.ilike(f"%{comp}%"))
+        if user.email:
+            email_prefix = user.email.split("@")[0].strip()
+            if len(email_prefix) >= 3:
+                client_filters.append(Shipment.consignor.ilike(f"%{email_prefix}%"))
+                client_filters.append(Shipment.consignee.ilike(f"%{email_prefix}%"))
+        query = query.filter(or_(*client_filters))
     if status_filter:
         query = query.filter(Shipment.status == status_filter)
     if q:
@@ -446,10 +460,25 @@ def upload_excel_csv_shipments(
                 status_enum = st
                 break
 
+        matched_client_id = None
+        if consignor or consignee:
+            c_user = db.query(User).filter(
+                (User.role == Role.CLIENT) &
+                (
+                    (User.full_name.ilike(f"%{consignor}%")) |
+                    (User.company.ilike(f"%{consignor}%")) |
+                    (User.full_name.ilike(f"%{consignee}%")) |
+                    (User.company.ilike(f"%{consignee}%"))
+                )
+            ).first()
+            if c_user:
+                matched_client_id = c_user.id
+
         system_tracking_code = generate_tracking_number(db)
 
         shipment = Shipment(
             tracking_number=system_tracking_code,
+            client_id=matched_client_id,
             lr_number=lr_num or f"LR-{random.randint(100000, 999999)}",
             invoice_number=inv or f"INV-{uuid.uuid4().hex[:6].upper()}",
             invoice_date=inv_date or datetime.now(timezone.utc),

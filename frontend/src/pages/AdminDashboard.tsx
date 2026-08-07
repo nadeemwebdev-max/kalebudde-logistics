@@ -1431,6 +1431,17 @@ export default function AdminDashboard() {
                 <label className="label">Driver Phone / Mobile</label>
                 <input name="driver_phone" placeholder="+91 98450 XXXXX" className="input text-xs" />
               </div>
+              <div className="col-span-full border-t border-slate-200 pt-3 mt-1">
+                <label className="label font-bold text-brand-900">🔗 Link Client Portal User Account (Optional)</label>
+                <select name="client_id" className="input text-xs font-semibold bg-slate-50 border-brand-200">
+                  <option value="">-- Optional: Auto-match by Consignor/Consignee Name --</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      👤 {u.full_name} ({u.email}) {u.company ? `[Company: ${u.company}]` : ''} - [{u.role.toUpperCase()}]
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div>
@@ -1522,6 +1533,17 @@ export default function AdminDashboard() {
               <div>
                 <label className="label">Driver Phone</label>
                 <input name="driver_phone" defaultValue={activeShipment.driver_phone || ""} className="input text-xs" />
+              </div>
+              <div className="col-span-full border-t border-slate-200 pt-3 mt-1">
+                <label className="label font-bold text-brand-900">🔗 Link Client Portal User Account (Optional)</label>
+                <select name="client_id" defaultValue={activeShipment.client_id || ""} className="input text-xs font-semibold bg-slate-50 border-brand-200">
+                  <option value="">-- Optional: Auto-match by Consignor/Consignee Name --</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      👤 {u.full_name} ({u.email}) {u.company ? `[Company: ${u.company}]` : ''} - [{u.role.toUpperCase()}]
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
