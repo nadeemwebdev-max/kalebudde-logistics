@@ -26,5 +26,12 @@ class Settings(BaseSettings):
     def cors_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
+    @property
+    def get_database_url(self) -> str:
+        url = self.DATABASE_URL
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        return url
+
 
 settings = Settings()
