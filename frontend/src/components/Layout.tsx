@@ -336,8 +336,20 @@ function Footer() {
         </div>
       </div>
 
-      <div className="border-t border-white/10 py-5 text-center text-xs text-brand-300">
-        © {new Date().getFullYear()} Kalebudde Logistics. All rights reserved.
+      <div className="border-t border-white/10 py-5 text-xs text-brand-300">
+        <div className="container-x flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p>© {new Date().getFullYear()} Kalebudde Logistics. All rights reserved.</p>
+          <p className="text-brand-200 font-medium">
+            Website Designed &amp; Developed by{" "}
+            <a
+              href="tel:+919738241415"
+              className="font-bold text-accent-400 hover:text-accent-300 transition hover:underline"
+              title="Contact Developer Nadeem Halhbavi"
+            >
+              Nadeem Halhbavi (+91 97382 41415)
+            </a>
+          </p>
+        </div>
       </div>
     </footer>
   );
