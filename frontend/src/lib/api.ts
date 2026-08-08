@@ -1,14 +1,47 @@
 import axios from "axios";
 
 export function getStoredToken(): string | null {
-  return sessionStorage.getItem("kl_token") || localStorage.getItem("kl_token");
+  const sessionToken = sessionStorage.getItem("kl_token");
+  if (sessionToken) return sessionToken;
+
+  if (typeof window !== "undefined") {
+    if (window.location.pathname.startsWith("/admin")) {
+      return localStorage.getItem("kl_admin_token") || localStorage.getItem("kl_token");
+    }
+    if (window.location.pathname.startsWith("/dashboard")) {
+      return localStorage.getItem("kl_client_token") || localStorage.getItem("kl_token");
+    }
+  }
+  return (
+    sessionStorage.getItem("kl_token") ||
+    localStorage.getItem("kl_token") ||
+    localStorage.getItem("kl_admin_token") ||
+    localStorage.getItem("kl_client_token")
+  );
 }
 
 export function getStoredUser(): User | null {
   try {
-    const raw = sessionStorage.getItem("kl_user") || localStorage.getItem("kl_user");
-    if (!raw || raw === "undefined" || raw === "null") return null;
-    return JSON.parse(raw) as User;
+    const raw = sessionStorage.getItem("kl_user");
+    if (raw && raw !== "undefined" && raw !== "null") {
+      return JSON.parse(raw) as User;
+    }
+    let fallbackRaw: string | null = null;
+    if (typeof window !== "undefined") {
+      if (window.location.pathname.startsWith("/admin")) {
+        fallbackRaw = localStorage.getItem("kl_admin_user") || localStorage.getItem("kl_user");
+      } else if (window.location.pathname.startsWith("/dashboard")) {
+        fallbackRaw = localStorage.getItem("kl_client_user") || localStorage.getItem("kl_user");
+      }
+    }
+    if (!fallbackRaw) {
+      fallbackRaw =
+        localStorage.getItem("kl_user") ||
+        localStorage.getItem("kl_admin_user") ||
+        localStorage.getItem("kl_client_user");
+    }
+    if (!fallbackRaw || fallbackRaw === "undefined" || fallbackRaw === "null") return null;
+    return JSON.parse(fallbackRaw) as User;
   } catch {
     return null;
   }
@@ -17,13 +50,27 @@ export function getStoredUser(): User | null {
 export function setSessionAuth(token: string, user: User) {
   sessionStorage.setItem("kl_token", token);
   sessionStorage.setItem("kl_user", JSON.stringify(user));
-  localStorage.setItem("kl_token", token);
-  localStorage.setItem("kl_user", JSON.stringify(user));
+  if (user.role === "admin" || user.role === "staff") {
+    localStorage.setItem("kl_admin_token", token);
+    localStorage.setItem("kl_admin_user", JSON.stringify(user));
+  } else {
+    localStorage.setItem("kl_client_token", token);
+    localStorage.setItem("kl_client_user", JSON.stringify(user));
+  }
 }
 
 export function clearSessionAuth() {
   sessionStorage.removeItem("kl_token");
   sessionStorage.removeItem("kl_user");
+  if (typeof window !== "undefined") {
+    if (window.location.pathname.startsWith("/admin")) {
+      localStorage.removeItem("kl_admin_token");
+      localStorage.removeItem("kl_admin_user");
+    } else if (window.location.pathname.startsWith("/dashboard")) {
+      localStorage.removeItem("kl_client_token");
+      localStorage.removeItem("kl_client_user");
+    }
+  }
   localStorage.removeItem("kl_token");
   localStorage.removeItem("kl_user");
 }
