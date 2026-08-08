@@ -8,19 +8,19 @@ const VEHICLES = [
     name: "32ft Multi-Axle Container",
     capacity: "Up to 15 tonnes",
     use: "Long-haul FMCG, paints and palletised cargo",
-    image: "/images/hero-truck.png",
+    image: "/images/hero-truck-clean.png",
   },
   {
     name: "20ft & 24ft Closed Body",
     capacity: "7 – 10 tonnes",
     use: "Regional distribution and retail replenishment",
-    image: "/images/fleet.png",
+    image: "/images/fleet-clean.png",
   },
   {
     name: "Open Body & Trailer",
     capacity: "Project cargo",
     use: "Steel, machinery and over-dimensional consignments",
-    image: "/images/warehouse.png",
+    image: "/images/warehouse-clean.png",
   },
 ];
 
@@ -31,14 +31,21 @@ export default function Fleet() {
         title="Our Fleet | Kalebudde Logistics Trucks & Vehicles"
         description="Explore the Kalebudde Logistics fleet — 32ft multi-axle containers, closed body trucks and open trailers, GPS tracked and maintained for safe pan-India delivery."
         path="/fleet"
-        image="/images/fleet.png"
+        image="/images/fleet-clean.png"
       />
 
       <section className="relative overflow-hidden bg-brand-900 py-20">
         <img
-          src="/images/fleet.png"
+          src="/images/fleet-clean.png"
           alt="Row of Kalebudde Logistics branded trucks at a depot"
           className="absolute inset-0 h-full w-full object-cover opacity-30"
+          onError={(e) => {
+            const target = e.currentTarget;
+            if (!target.dataset.tried) {
+              target.dataset.tried = "true";
+              target.src = "/images/fleet.png";
+            }
+          }}
         />
         <div className="container-x relative">
           <p className="eyebrow">Our fleet</p>

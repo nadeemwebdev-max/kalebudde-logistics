@@ -75,12 +75,19 @@ export default function About() {
 
         <div className="overflow-hidden rounded-2xl shadow-xl bg-slate-100">
           <img
-            src="/images/fleet.png"
+            src="/images/fleet-clean.png"
             alt="Fleet of Kalebudde Logistics trucks at the company depot"
             className="h-full w-full object-cover"
             loading="lazy"
             width={1568}
             height={784}
+            onError={(e) => {
+              const target = e.currentTarget;
+              if (!target.dataset.tried) {
+                target.dataset.tried = "true";
+                target.src = "/images/fleet.png";
+              }
+            }}
           />
         </div>
       </section>

@@ -56,12 +56,19 @@ export default function Home() {
       {/* Hero */}
       <section className="relative overflow-hidden bg-brand-900">
         <img
-          src="/images/hero-truck.png"
+          src="/images/hero-truck-clean.png"
           alt="Kalebudde Logistics branded container truck on an Indian highway at sunset"
           className="absolute inset-0 h-full w-full object-cover opacity-40"
           fetchPriority="high"
           width={1536}
           height={1024}
+          onError={(e) => {
+            const target = e.currentTarget;
+            if (!target.dataset.tried) {
+              target.dataset.tried = "true";
+              target.src = "/images/hero-truck.png";
+            }
+          }}
         />
         <div className="absolute inset-0 bg-gradient-to-r from-brand-900 via-brand-900/85 to-brand-900/30" />
         <div className="container-x relative py-24 lg:py-32 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
@@ -154,7 +161,7 @@ export default function Home() {
         <div className="container-x grid items-center gap-12 lg:grid-cols-2">
           <div className="overflow-hidden rounded-2xl shadow-xl">
             <img
-              src="/images/warehouse.png"
+              src="/images/warehouse-clean.png"
               alt="Kalebudde Logistics warehouse interior with racking and palletised goods"
               className="h-full w-full object-cover"
               loading="lazy"
@@ -164,7 +171,7 @@ export default function Home() {
                 const target = e.currentTarget;
                 if (!target.dataset.tried) {
                   target.dataset.tried = "true";
-                  target.src = "/images/warehouse.jpg";
+                  target.src = "/images/warehouse.png";
                 }
               }}
             />
@@ -228,7 +235,7 @@ export default function Home() {
       <section className="container-x">
         <div className="relative overflow-hidden rounded-3xl bg-brand-900 px-8 py-16 text-center">
           <img
-            src="/images/fleet.png"
+            src="/images/fleet-clean.png"
             alt=""
             aria-hidden="true"
             className="absolute inset-0 h-full w-full object-cover opacity-20"
@@ -237,7 +244,7 @@ export default function Home() {
               const target = e.currentTarget;
               if (!target.dataset.tried) {
                 target.dataset.tried = "true";
-                target.src = "/images/fleet.jpg";
+                target.src = "/images/fleet.png";
               }
             }}
           />
