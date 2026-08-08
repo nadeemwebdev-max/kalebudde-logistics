@@ -1,11 +1,39 @@
 import axios from "axios";
 
+export function getStoredToken(): string | null {
+  return sessionStorage.getItem("kl_token") || localStorage.getItem("kl_token");
+}
+
+export function getStoredUser(): User | null {
+  try {
+    const raw = sessionStorage.getItem("kl_user") || localStorage.getItem("kl_user");
+    if (!raw || raw === "undefined" || raw === "null") return null;
+    return JSON.parse(raw) as User;
+  } catch {
+    return null;
+  }
+}
+
+export function setSessionAuth(token: string, user: User) {
+  sessionStorage.setItem("kl_token", token);
+  sessionStorage.setItem("kl_user", JSON.stringify(user));
+  localStorage.setItem("kl_token", token);
+  localStorage.setItem("kl_user", JSON.stringify(user));
+}
+
+export function clearSessionAuth() {
+  sessionStorage.removeItem("kl_token");
+  sessionStorage.removeItem("kl_user");
+  localStorage.removeItem("kl_token");
+  localStorage.removeItem("kl_user");
+}
+
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "",
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("kl_token");
+  const token = getStoredToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -14,8 +42,7 @@ api.interceptors.response.use(
   (r) => r,
   (error) => {
     if (error?.response?.status === 401) {
-      localStorage.removeItem("kl_token");
-      localStorage.removeItem("kl_user");
+      clearSessionAuth();
     }
     return Promise.reject(error);
   }

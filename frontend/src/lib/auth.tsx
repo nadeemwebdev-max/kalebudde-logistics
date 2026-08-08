@@ -2,7 +2,15 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 
-import { api, type Role, type User } from "./api";
+import {
+  api,
+  clearSessionAuth,
+  getStoredToken,
+  getStoredUser,
+  setSessionAuth,
+  type Role,
+  type User,
+} from "./api";
 
 interface AuthCtx {
   user: User | null;
@@ -21,20 +29,11 @@ const Ctx = createContext<AuthCtx>({} as AuthCtx);
 export const useAuth = () => useContext(Ctx);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    try {
-      const raw = localStorage.getItem("kl_user");
-      if (!raw || raw === "undefined" || raw === "null") return null;
-      return JSON.parse(raw) as User;
-    } catch {
-      localStorage.removeItem("kl_user");
-      return null;
-    }
-  });
+  const [user, setUser] = useState<User | null>(() => getStoredUser());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem("kl_token");
+    const token = getStoredToken();
     if (!token) {
       setLoading(false);
       return;
@@ -44,16 +43,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(({ data }) => {
         if (data && typeof data === "object") {
           setUser(data);
+          sessionStorage.setItem("kl_user", JSON.stringify(data));
           localStorage.setItem("kl_user", JSON.stringify(data));
         } else {
           setUser(null);
-          localStorage.removeItem("kl_user");
+          clearSessionAuth();
         }
       })
       .catch(() => {
         setUser(null);
-        localStorage.removeItem("kl_token");
-        localStorage.removeItem("kl_user");
+        clearSessionAuth();
       })
       .finally(() => setLoading(false));
   }, []);
@@ -65,8 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async login(email, password) {
         const body = new URLSearchParams({ username: email, password });
         const { data } = await api.post("/api/auth/login", body);
-        localStorage.setItem("kl_token", data.access_token);
-        localStorage.setItem("kl_user", JSON.stringify(data.user));
+        setSessionAuth(data.access_token, data.user);
         setUser(data.user);
         return data.user as User;
       },
@@ -74,8 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await api.post("/api/auth/register", payload);
       },
       logout() {
-        localStorage.removeItem("kl_token");
-        localStorage.removeItem("kl_user");
+        clearSessionAuth();
         setUser(null);
       },
     }),
@@ -102,7 +99,13 @@ export function RequireAuth({
       </div>
     );
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
-  if (roles && !roles.includes(user.role))
+  if (roles && !roles.includes(user.role)) {
+    if (user.role === "client") {
+      return <Navigate to="/dashboard" replace />;
+    }
+    if (user.role === "admin" || user.role === "staff") {
+      return <Navigate to="/admin" replace />;
+    }
     return (
       <div className="container-x py-24 text-center">
         <h1 className="h2">Access restricted</h1>
@@ -111,5 +114,6 @@ export function RequireAuth({
         </p>
       </div>
     );
+  }
   return <>{children}</>;
 }
